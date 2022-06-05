@@ -1,0 +1,7 @@
+os.bin
+os.iso
+*.o
+obj
+isodir
+*.swp
+*.swo
