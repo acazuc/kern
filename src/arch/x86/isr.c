@@ -14,7 +14,6 @@ static void exception_handler(uint32_t err)
 static void irq_handler_32(uint32_t err)
 {
 	(void)err;
-	term_putstr("IRQ 32\n");
 	outb(0x20, 0x20);
 }
 

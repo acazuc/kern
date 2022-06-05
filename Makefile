@@ -60,7 +60,7 @@ $(ISO_NAME): $(BIN_NAME)
 	@grub-mkrescue -o $@ isodir
 
 run: $(BIN_NAME)
-	@qemu-system-i386 -kernel $(BIN_NAME)  -d int,guest_errors,pcall,unimp -D qemu.log
+	@qemu-system-i386 -kernel $(BIN_NAME)
 
 odir:
 	@mkdir -p $(OBJ_PATH)
