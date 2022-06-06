@@ -25,6 +25,8 @@ SRC_NAME = kernel.c \
            dev/pic/pic.c \
            dev/vga/term.c \
            dev/pit/pit.c \
+           sys/string.c \
+           sys/printf.c \
 
 SRC_PATH = src
 
@@ -70,6 +72,7 @@ odir:
 	@mkdir -p $(OBJ_PATH)/dev/pic
 	@mkdir -p $(OBJ_PATH)/dev/vga
 	@mkdir -p $(OBJ_PATH)/dev/pit
+	@mkdir -p $(OBJ_PATH)/sys
 
 clean:
 	@rm -f $(OBJ)
