@@ -1,5 +1,5 @@
-#ifndef PIC_H
-#define PIC_H
+#ifndef DEV_PIC_H
+#define DEV_PIC_H
 
 #include <stdint.h>
 

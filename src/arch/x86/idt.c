@@ -1,6 +1,4 @@
 #include "idt.h"
-#include "dev/vga/term.h"
-#include "io.h"
 
 extern void *g_isr_table[];
 
@@ -21,7 +19,6 @@ typedef struct idtr
 
 static idtr_t g_idtr;
 static idt_entry_t g_idt[256];
-
 
 static void set_descriptor(struct idt_entry *descriptor, void *isr, uint8_t flags)
 {

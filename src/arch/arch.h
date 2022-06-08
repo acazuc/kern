@@ -1,6 +1,8 @@
 #ifndef ARCH_H
 #define ARCH_H
 
-void boot(void);
+struct multiboot_info;
+
+void boot(struct multiboot_info *mb_info);
 
 #endif

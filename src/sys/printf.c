@@ -1,790 +1,536 @@
 #include "std.h"
 
+#include "shell.h"
+
 #include <stdarg.h>
 #include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
 
-typedef struct flags
-{
-	char minus;
-	char space;
-	char zero;
-	char plus;
-	char sharp;
-} flags_t;
+#define FLAG_MINUS (1 << 0)
+#define FLAG_SPACE (1 << 2)
+#define FLAG_ZERO  (1 << 3)
+#define FLAG_PLUS  (1 << 4)
+#define FLAG_SHARP (1 << 5)
+#define FLAG_HH    (1 << 6)
+#define FLAG_H     (1 << 7)
+#define FLAG_LL    (1 << 8)
+#define FLAG_L     (1 << 9)
+#define FLAG_J     (1 << 10)
+#define FLAG_Z     (1 << 11)
+#define FLAG_T     (1 << 12)
 
 typedef struct arg
 {
-	flags_t flags;
-	va_list *va_lst;
+	va_list *va_arg;
+	uint32_t flags;
 	int width;
 	int preci;
-	char type;
-	char h;
-	char hh;
-	char l;
-	char ll;
+	uint8_t type;
 	char j;
 	char z;
 } arg_t;
 
-void flags_ctr(flags_t *flags)
+typedef struct printf_buf
 {
-	flags->minus = 0;
-	flags->space = 0;
-	flags->zero = 0;
-	flags->plus = 0;
-	flags->sharp = 0;
-}
+	char *data;
+	size_t size;
+	size_t len;
+} printf_buf_t;
 
-void arg_ctr(arg_t *arg, va_list *lst)
+typedef void (*print_fn_t)(printf_buf_t*, arg_t*);
+
+static const print_fn_t g_print_fns[256];
+
+static bool parse_arg(arg_t *arg, const char *fmt, size_t *i);
+
+static void arg_ctr(arg_t *arg, va_list *va_arg)
 {
-	flags_ctr(&arg->flags);
-	arg->va_lst = lst;
+	arg->va_arg = va_arg;
+	arg->flags = 0;
 	arg->width = -1;
 	arg->preci = -1;
 	arg->type = '\0';
-	arg->l = 0;
-	arg->ll = 0;
-	arg->h = 0;
-	arg->hh = 0;
-	arg->j = 0;
-	arg->z = 0;
 }
 
-static size_t	get_size(long long int n)
+static void putchar(printf_buf_t *buf, char c)
 {
-	size_t					size;
+	if (buf->len < buf->size)
+		buf->data[buf->len] = c;
+	buf->len++;
+}
 
-	size = n < 0 ? 2 : 1;
-	n = n < 0 ? -n : n;
-	while (n > 0)
+#if 0
+static void putnstr(printf_buf_t *buf, const char *s, size_t n)
+{
+	for (size_t i = 0; s[i] && i < n; ++i)
+		putchar(buf, s[i]);
+}
+#endif
+
+static void putstr(printf_buf_t *buf, const char *s)
+{
+	for (size_t i = 0; s[i]; ++i)
+		putchar(buf, s[i]);
+}
+
+static void print_spaces(printf_buf_t *buf, size_t n)
+{
+	for (size_t i = 0; i < n; ++i)
+		putchar(buf, ' ');
+}
+
+static void print_zeros(printf_buf_t *buf, size_t n)
+{
+	for (size_t i = 0; i < n; ++i)
+		putchar(buf, '0');
+}
+
+#if 0
+static void print_arg_spaces(printf_buf_t *buf, arg_t *arg, size_t len)
+{
+	size_t preci;
+	size_t width;
+
+	preci = (size_t)arg->preci;
+	width = (size_t)arg->width;
+	if (arg->width > 0 && ((arg->preci <= 0 && width > MAX(preci, len))))
+		print_spaces(buf, arg->width - (arg->preci <= 0 ? len : MAX(preci, len)));
+}
+#endif
+
+static long long int get_int_val(arg_t *arg)
+{
+	if (arg->flags & FLAG_LL)
+		return va_arg(*arg->va_arg, long long int);
+	else if (arg->flags & FLAG_L)
+		return va_arg(*arg->va_arg, long int);
+	else if (arg->flags & FLAG_HH)
+		return (char)va_arg(*arg->va_arg, int);
+	else if (arg->flags & FLAG_H)
+		return (short int)va_arg(*arg->va_arg, int);
+	else if (arg->flags & FLAG_J)
+		return va_arg(*arg->va_arg, intmax_t);
+	else if (arg->flags & FLAG_Z)
+		return va_arg(*arg->va_arg, size_t);
+	else if (arg->flags & FLAG_T)
+		return va_arg(*arg->va_arg, ptrdiff_t);
+	return va_arg(*arg->va_arg, int);
+}
+
+static unsigned long long int get_uint_val(arg_t *arg)
+{
+	if (arg->flags & FLAG_LL)
+		return va_arg(*arg->va_arg, unsigned long long int);
+	else if (arg->flags & FLAG_L)
+		return va_arg(*arg->va_arg, unsigned long int);
+	else if (arg->flags & FLAG_HH)
+		return (unsigned char)va_arg(*arg->va_arg, unsigned int);
+	else if (arg->flags & FLAG_H)
+		return (unsigned short int)va_arg(*arg->va_arg, unsigned int);
+	else if (arg->flags & FLAG_J)
+		return va_arg(*arg->va_arg, uintmax_t);
+	else if (arg->flags & FLAG_Z)
+		return va_arg(*arg->va_arg, size_t);
+	else if (arg->flags & FLAG_T)
+		return va_arg(*arg->va_arg, ptrdiff_t);
+	return va_arg(*arg->va_arg, unsigned int);
+}
+
+static int printf_buf(printf_buf_t *buf, const char *fmt, va_list va_arg)
+{
+	for (size_t i = 0; fmt[i]; ++i)
 	{
-		size++;
-		n /= 10;
+		if (fmt[i] == '%')
+		{
+			arg_t arg;
+			i++;
+			arg_ctr(&arg, &va_arg);
+			parse_arg(&arg, fmt, &i);
+			if (g_print_fns[arg.type])
+				g_print_fns[arg.type](buf, &arg);
+		}
+		else
+		{
+			putchar(buf, fmt[i]);
+		}
 	}
-	return (size);
+	if (buf->len < buf->size)
+		buf->data[buf->len] = '\0';
+	else
+		buf->data[buf->size - 1] = '\0';
+	return buf->len;
 }
 
-char			*ft_ltoa(long long int n)
+int vprintf(const char *fmt, va_list va_arg)
 {
-	char					*result;
-	size_t					size;
-	unsigned long long int	j;
-	unsigned long long int	i;
-	unsigned long long int	nb;
-
-	if (n == 0)
-		return (ft_strdup("0"));
-	nb = n < 0 ? -n : n;
-	size = get_size(n);
-	if (!(result = malloc(sizeof(result) * size)))
-		return (result);
-	if (n < 0)
-		result[0] = '-';
-	j = 1;
-	i = 1;
-	while (nb / j > 0)
-	{
-		result[size - i++ - 1] = (nb / j) % 10 + '0';
-		j = j * 10;
-	}
-	result[size - 1] = '\0';
-	return (result);
-}
-
-char	*ft_strjoin(char const *s1, char const *s2)
-{
-	char	*result;
-	size_t	size;
-	size_t	i;
-	size_t	j;
-
-	i = 0;
-	while (s1[i])
-		i++;
-	size = i;
-	i = 0;
-	while (s2[i])
-		i++;
-	size = size + i + 1;
-	result = malloc(sizeof(*result) * size);
-	if (!result)
-		return (result);
-	i = -1;
-	j = -1;
-	while (s1[++i])
-		result[++j] = s1[i];
-	i = -1;
-	while (s2[++i])
-		result[++j] = s2[i];
-	result[++j] = '\0';
-	return (result);
-}
-
-char	*ft_strjoin_free2(char *s1, char *s2)
-{
-	char	*result;
-
-	result = ft_strjoin(s1, s2);
-	free(s2);
-	return (result);
-}
-
-char	*ft_strsub(char const *s, unsigned int start, size_t len)
-{
-	char	*result;
-	size_t	i;
-
-	result = malloc(sizeof(*result) * (len + 1));
-	if (!result)
-		return (result);
-	i = 0;
-	while (i < len)
-	{
-		result[i] = s[start + i];
-		i++;
-	}
-	result[len] = '\0';
-	return (result);
-}
-
-static size_t	get_size(unsigned long long int n, char *base)
-{
-	size_t					size;
-
-	size = 1;
-	while (n > 0)
-	{
-		size++;
-		n /= ft_strlen(base);
-	}
-	return (size);
-}
-
-char			*ft_ultoa_base(unsigned long long int n, char *base)
-{
-	char					*result;
-	size_t					size;
-	unsigned long long int	j;
-	unsigned long long int	i;
-	unsigned long long int	nb;
-
-	if (!base || ft_strlen(base) < 2)
-		return (NULL);
-	if (n == 0)
-		return (ft_strdup("0"));
-	nb = n;
-	size = get_size(n, base);
-	if (!(result = malloc(sizeof(result) * size)))
-		return (result);
-	j = 1;
-	i = 1;
-	while (nb / j > 0)
-	{
-		result[size - i++ - 1] = base[(nb / j) % ft_strlen(base)];
-		j = j * ft_strlen(base);
-	}
-	result[size - 1] = '\0';
-	return (result);
-}
-
-static size_t	get_size(unsigned long long int n)
-{
-	size_t					size;
-
-	size = 1;
-	while (n > 0)
-	{
-		size++;
-		n /= 10;
-	}
-	return (size);
-}
-
-char			*ft_ultoa(unsigned long long int n)
-{
-	char					*result;
-	size_t					size;
-	unsigned long long int	j;
-	unsigned long long int	i;
-	unsigned long long int	nb;
-
-	if (n == 0)
-		return (ft_strdup("0"));
-	nb = n;
-	size = get_size(n);
-	if (!(result = malloc(sizeof(result) * size)))
-		return (result);
-	j = 1;
-	i = 1;
-	while (nb / j > 0)
-	{
-		result[size - i++ - 1] = (nb / j) % 10 + '0';
-		j = j * 10;
-	}
-	result[size - 1] = '\0';
-	return (result);
-}
-
-size_t	ft_wstrlen(wchar_t const *s)
-{
-	size_t	len;
-
-	len = 0;
-	while (s[len])
-		len++;
-	return (len);
-}
-
-wchar_t	*ft_wstrsub(wchar_t const *s, unsigned int start, size_t len)
-{
-	wchar_t	*result;
-	size_t	i;
-
-	result = malloc(sizeof(*result) * (len + 1));
-	if (!result)
-		return (result);
-	i = 0;
-	while (i < len)
-	{
-		result[i] = s[start + i];
-		i++;
-	}
-	result[len] = L'\0';
-	return (result);
+	char str[4096];
+	printf_buf_t buf;
+	buf.data = str;
+	buf.size = sizeof(str);
+	buf.len = 0;
+	int ret = printf_buf(&buf, fmt, va_arg);
+	shell_putstr(buf.data); /* XXX: more generic to allow multiple consumers */
+	return ret;
 }
 
 int printf(const char *fmt, ...)
 {
 	va_list va_arg;
-
 	va_start(va_arg, fmt);
-	for (size_t i = 0; fmt[i]; ++i)
+	int ret = vprintf(fmt, va_arg);
+	va_end(va_arg);
+	return ret;
+}
+
+int vsnprintf(char *d, size_t n, const char *fmt, va_list va_arg)
+{
+	printf_buf_t buf;
+	buf.data = d;
+	buf.size = n;
+	buf.len = 0;
+	return printf_buf(&buf, fmt, va_arg);
+}
+
+int snprintf(char *d, size_t n, const char *fmt, ...)
+{
+	va_list va_arg;
+	va_start(va_arg, fmt);
+	int ret = vsnprintf(d, n, fmt, va_arg);
+	va_end(va_arg);
+	return ret;
+}
+
+static bool parse_flags(arg_t *arg, char c)
+{
+	if (c == '-')
+		arg->flags |= FLAG_MINUS;
+	else if (c == '+')
+		arg->flags |= FLAG_PLUS;
+	else if (c == '0')
+		arg->flags |= FLAG_ZERO;
+	else if (c == '#')
+		arg->flags |= FLAG_SHARP;
+	else if (c == ' ')
+		arg->flags |= FLAG_SPACE;
+	else
+		return false;
+	return true;
+}
+
+static bool parse_preci(arg_t *arg, const char *fmt, size_t *i)
+{
+	size_t start;
+	size_t end;
+
+	if (fmt[*i] != '.')
+		return true;
+	(*i)++;
+	start = *i;
+	while (fmt[*i] >= '0' && fmt[*i] <= '9')
+		(*i)++;
+	end = *i;
+	if (end == start)
+		return true;
+	arg->preci = atoin(&fmt[start], end - start);
+	return true;
+}
+
+static void parse_length(arg_t *arg, const char *fmt, size_t *i)
+{
+	if (fmt[*i] == 'h')
 	{
-		if (fmt[i] == '%')
+		if (fmt[*i + 1] == 'h')
 		{
-			arg_t *arg;
-			i++;
-			parse_arg(str, &i, &va_arg);
-			print_argument(argument);
-			argument_free(argument);
-			continue;
+			arg->flags |= FLAG_HH;
+			(*i)++;
 		}
 		else
 		{
-			ft_putchar(str[i]);
+			arg->flags |= FLAG_H;
+		}
+		(*i)++;
+	}
+	else if (fmt[*i] == 'l')
+	{
+		if (fmt[*i + 1] == 'l')
+		{
+			arg->flags |= FLAG_LL;
+			(*i)++;
+		}
+		else
+		{
+			arg->flags |= FLAG_L;
+		}
+		(*i)++;
+	}
+	else if (fmt[*i] == 'j')
+	{
+		arg->flags |= FLAG_J;
+		(*i)++;
+	}
+	else if (fmt[*i] == 'z')
+	{
+		arg->flags |= FLAG_Z;
+		(*i)++;
+	}
+	else if (fmt[*i] == '\t')
+	{
+		arg->flags |= FLAG_T;
+		(*i)++;
+	}
+}
+
+static bool parse_width(arg_t *arg, const char *fmt, size_t *i)
+{
+	size_t start;
+	size_t end;
+
+	start = *i;
+	while (isdigit(fmt[*i]))
+		(*i)++;
+	end = *i;
+	if (end == start)
+		return true;
+	arg->width = atoin(&fmt[start], end - start);
+	return true;
+}
+
+static bool parse_arg(arg_t *arg, const char *fmt, size_t *i)
+{
+	while (parse_flags(arg, fmt[*i]))
+		(*i)++;
+	if (!parse_width(arg, fmt, i))
+		return false;
+	if (!parse_preci(arg, fmt, i))
+		return false;
+	parse_length(arg, fmt, i);
+	arg->type = fmt[*i];
+	return true;
+}
+
+static void print_str(printf_buf_t *buf, arg_t *arg, const char *prefix, const char *s)
+{
+	size_t len = strlen(s);
+	size_t prefix_len;
+	if (prefix)
+	{
+		putstr(buf, prefix);
+		prefix_len = strlen(prefix);
+	}
+	else
+	{
+		prefix_len = 0;
+	}
+	if (arg->width > 0)
+	{
+		size_t width = arg->width;
+		if (width > len + prefix_len)
+		{
+			if (arg->flags & FLAG_ZERO)
+				print_zeros(buf, width - len - prefix_len);
+			else
+				print_spaces(buf, width - len - prefix_len);
 		}
 	}
-	va_end(va_arg);
+	putstr(buf, s);
 }
 
-static void	parse_flags(t_flags *flags, char *str, size_t *i)
+static void print_c(printf_buf_t *buf, arg_t *arg)
 {
-	if (str[*i] == '-')
-		flags->minus = 1;
-	else if (str[*i] == '+')
-		flags->plus = 1;
-	else if (str[*i] == '0')
-		flags->zero = 1;
-	else if (str[*i] == '#')
-		flags->sharp = 1;
-	else if (str[*i] == ' ')
-		flags->space = 1;
-	if (str[*i] == '-' || str[*i] == '+' || str[*i] == '0' || str[*i] == '#'
-			|| str[*i] == ' ')
-	{
-		(*i)++;
-		parse_flags(flags, str, i);
-	}
+	uint8_t vals[2];
+
+	vals[0] = (unsigned char)va_arg(*arg->va_arg, int);
+	vals[1] = '\0';
+#if 0
+	if (arg->width > 0 && !(arg->flags & FLAG_MINUS))
+		print_spaces(buf, arg->width - 1);
+#endif
+	print_str(buf, arg, NULL, (char*)&vals[0]);
+#if 0
+	if (arg->width > 0 && (arg->flags & FLAG_MINUS))
+		print_spaces(buf, arg->width - 1);
+#endif
 }
 
-static int	parse_preci(t_argument *argument, char *str, size_t *i)
+static void print_d(printf_buf_t *buf, arg_t *arg)
 {
-	size_t	start;
-	size_t	end;
-	char	*result;
+	long long int val;
+	char str[64];
 
-	if (str[*i] != '.')
-		return (1);
-	(*i)++;
-	start = *i;
-	while (str[*i] >= '0' && str[*i] <= '9')
-		(*i)++;
-	end = *i;
-	if (end == start)
-		return (1);
-	if (!(result = ft_strsub(str, start, end - start)))
-		return (0);
-	argument->preci = ft_atoi(result);
-	return (1);
-}
-
-t_argument	*parse_arg(char *str, size_t *i, va_list *lst)
-{
-	t_argument	*argument;
-
-	if (!(argument = argument_create(lst)))
-		return (NULL);
-	parse_flags(argument->flags, str, i);
-	if (!parse_width(argument, str, i))
-	{
-		argument_free(argument);
-		return (NULL);
-	}
-	if (!parse_preci(argument, str, i))
-	{
-		argument_free(argument);
-		return (NULL);
-	}
-	parse_length(argument, str, i);
-	argument->type = str[*i];
-	return (argument);
-}
-
-static void	parse_h(t_argument *argument, char *str, size_t *i)
-{
-	if (str[*i + 1] == 'h')
-	{
-		argument->hh = 1;
-		(*i)++;
-	}
-	else
-		argument->h = 1;
-	(*i)++;
-}
-
-static void	parse_l(t_argument *argument, char *str, size_t *i)
-{
-	if (str[*i + 1] == 'l')
-	{
-		argument->ll = 1;
-		(*i)++;
-	}
-	else
-		argument->l = 1;
-	(*i)++;
-}
-
-void		parse_length(t_argument *argument, char *str, size_t *i)
-{
-	if (str[*i] == 'h')
-		parse_h(argument, str, i);
-	else if (str[*i] == 'l')
-		parse_l(argument, str, i);
-	else if (str[*i] == 'j')
-	{
-		argument->j = 1;
-		(*i)++;
-	}
-	else if (str[*i] == 'z')
-	{
-		argument->z = 1;
-		(*i)++;
-	}
-}
-
-int				parse_width(t_argument *argument, char *str, size_t *i)
-{
-	size_t	start;
-	size_t	end;
-	char	*result;
-
-	start = *i;
-	while (str[*i] >= '0' && str[*i] <= '9')
-		(*i)++;
-	end = *i;
-	if (end == start)
-		return (1);
-	if (!(result = ft_strsub(str, start, end - start)))
-		return (0);
-	argument->width = ft_atoi(result);
-	return (1);
-}
-
-static void		print_argument_2(t_argument *argument)
-{
-	if (argument->type == 'X')
-		print_argument_x_caps(argument);
-	else if (argument->type == 'c')
-		print_argument_c(argument);
-	else if (argument->type == 'C')
-		print_argument_c_caps(argument);
-	else if (argument->type == '%')
-		print_argument_percent(argument);
-}
-
-void			print_argument(t_argument *argument)
-{
-	if (argument->type == 's')
-		print_argument_s(argument);
-	else if (argument->type == 'S')
-		print_argument_s_caps(argument);
-	else if (argument->type == 'p')
-		print_argument_p(argument);
-	else if (argument->type == 'd')
-		print_argument_d(argument);
-	else if (argument->type == 'D')
-		print_argument_d_caps(argument);
-	else if (argument->type == 'i')
-		print_argument_i(argument);
-	else if (argument->type == 'o')
-		print_argument_o(argument);
-	else if (argument->type == 'O')
-		print_argument_o_caps(argument);
-	else if (argument->type == 'u')
-		print_argument_u(argument);
-	else if (argument->type == 'U')
-		print_argument_u_caps(argument);
-	else if (argument->type == 'x')
-		print_argument_x(argument);
-	else
-		print_argument_2(argument);
-}
-
-void	print_argument_c(t_argument *argument)
-{
-	size_t	ret;
-	wint_t	val;
-
-	if (argument->l)
-		val = va_arg(*argument->va_lst, wint_t);
-	else
-		val = (unsigned char)va_arg(*argument->va_lst, int);
-	if (argument->width > 0 && !argument->flags->minus)
-		print_spaces(argument->width - 1);
-	if (argument->l)
-		ft_putwchar(val);
-	else
-		ft_putchar(val);
-	if (argument->width > 0 && argument->flags->minus)
-		print_spaces(argument->width - 1);
-	(void)ret;
-}
-
-void	print_argument_c_caps(t_argument *argument)
-{
-	argument->ll = 0;
-	argument->l = 1;
-	argument->h = 0;
-	argument->hh = 0;
-	argument->z = 0;
-	argument->j = 0;
-	print_argument_c(argument);
-}
-
-static long long int	get_val(t_argument *argument)
-{
-	if (argument->ll)
-		return (va_arg(*argument->va_lst, long long int));
-	else if (argument->l)
-		return (va_arg(*argument->va_lst, long int));
-	else if (argument->hh)
-		return ((signed char)va_arg(*argument->va_lst, int));
-	else if (argument->h)
-		return ((short int)va_arg(*argument->va_lst, int));
-	return (va_arg(*argument->va_lst, int));
-}
-
-void	print_argument_d(t_argument *argument)
-{
-	size_t			len;
-	char			*str;
-	long long int	val;
-
-	val = get_val(argument);
-	if (!(str = ft_ltoa(val)))
-		return ;
-	if (argument->flags->plus && val >= 0)
+	val = get_int_val(arg);
+	lltoa(str, val);
+#if 0
+	if ((arg->flags & FLAG_PLUS) && val >= 0)
 	{
 		if (!(str = ft_strjoin_free2("+", str)))
 			return ;
 	}
-	len = ft_strlen(str);
-	if (!argument->flags->minus)
-		print_argument_spaces(argument, len);
-	if (argument->preci > 0 && (size_t)argument->preci > len)
+	len = strlen(str);
+	if (!(arg->flags & FLAG_MINUS))
+		print_argument_spaces(arg, len);
+	if (arg->preci > 0 && (size_t)arg->preci > len)
 		print_zeros(argument->preci - len);
-	ft_putstr(str);
-	if (argument->flags->minus)
+#endif
+	print_str(buf, arg, NULL, str);
+#if 0
+	if (arg->flags & FLAG_MINUS)
 		print_argument_spaces(argument, len);
+#endif
 }
 
-void	print_argument_d_caps(t_argument *argument)
+static void print_i(printf_buf_t *buf, arg_t *arg)
 {
-	argument->l = 1;
-	argument->ll = 0;
-	argument->h = 0;
-	argument->hh = 0;
-	argument->j = 0;
-	print_argument_d(argument);
+	print_d(buf, arg);
 }
 
-void	print_argument_i(t_argument *argument)
+static void print_o(printf_buf_t *buf, arg_t *arg)
 {
-	print_argument_d(argument);
+	char str[64];
+	unsigned long long int val;
+
+	val = get_uint_val(arg);
+	ulltoa_base(str, val, "01234567");
+#if 0
+	if (arg->flags->sharp && !(str = ft_strjoin_free2("0", str)))
+		return;
+	len = strlen(str);
+	if (!(arg->flags-> & FLAG_MINUS) && argument->width > 0
+			&& ((arg->preci <= 0 && (size_t)arg->width > len)
+				|| (arg->preci >= 1 && (size_t)arg->width > MAX((size_t)arg->preci, len))))
+		print_spaces(buf, arg->width - (arg->preci <= 0 ? len : MAX((size_t)arg->preci, len)));
+	if (arg->preci > 0 && (size_t)arg->preci > len)
+		print_zeros(buf, arg->preci - len);
+#endif
+	print_str(buf, arg, NULL, str);
+#if 0
+	if ((arg->flags & FLAG_MINUS) && argument->width > 0
+			&& ((arg->preci <= 0 && (size_t)argument->width > len)
+				|| (arg->preci >= 1 && (size_t)argument->width > MAX((size_t)argument->preci, len))))
+		print_spaces(buf, arg->width - (argument->preci <= 0 ? len : MAX((size_t)argument->preci, len)));
+#endif
 }
 
-static unsigned long long int	get_val(t_argument *argument)
+static void print_s(printf_buf_t *buf, arg_t *arg)
 {
-	if (argument->ll)
-		return (va_arg(*argument->va_lst, unsigned long long int));
-	else if (argument->l)
-		return (va_arg(*argument->va_lst, unsigned long int));
-	else if (argument->hh)
-		return ((unsigned char)va_arg(*argument->va_lst, unsigned int));
-	else if (argument->h)
-		return ((unsigned short int)va_arg(*argument->va_lst, unsigned int));
-	return (va_arg(*argument->va_lst, unsigned int));
-}
+	char *str;
 
-void	print_argument_o(t_argument *argument)
-{
-	size_t					len;
-	char					*str;
-	unsigned long long int	val;
-
-	val = get_val(argument);
-	if (!(str = ft_ultoa_base(val, "01234567")))
-		return ;
-	if (argument->flags->sharp && !(str = ft_strjoin_free2("0", str)))
-		return ;
-	len = ft_strlen(str);
-	if (!argument->flags->minus && argument->width > 0
-			&& ((argument->preci <= 0 && (size_t)argument->width > len)
-				|| (argument->preci >= 1 && (size_t)argument->width > MAX((size_t)argument->preci, len))))
-		print_spaces(argument->width - (argument->preci <= 0 ? len : MAX((size_t)argument->preci, len)));
-	if (argument->preci > 0 && (size_t)argument->preci > len)
-		print_zeros(argument->preci - len);
-	ft_putstr(str);
-	if (argument->flags->minus && argument->width > 0
-			&& ((argument->preci <= 0 && (size_t)argument->width > len)
-				|| (argument->preci >= 1 && (size_t)argument->width > MAX((size_t)argument->preci, len))))
-		print_spaces(argument->width - (argument->preci <= 0 ? len : MAX((size_t)argument->preci, len)));
-}
-
-void	print_argument_o_caps(t_argument *argument)
-{
-	argument->ll = 0;
-	argument->l = 1;
-	argument->hh = 0;
-	argument->h = 0;
-	argument->j = 0;
-	argument->z = 0;
-	print_argument_o(argument);
-}
-
-void	print_argument_p(t_argument *argument)
-{
-	argument->flags->sharp = 1;
-	argument->l = 1;
-	argument->ll = 0;
-	argument->h = 0;
-	argument->hh = 0;
-	argument->z = 0;
-	argument->j = 0;
-	print_argument_x(argument);
-}
-
-void	print_argument_percent(t_argument *argument)
-{
-	(void)argument;
-}
-
-static void	print_wstr(t_argument *argument)
-{
-	size_t	len;
-	wchar_t	*str;
-	char	cut;
-
-	str = va_arg(*argument->va_lst, wchar_t*);
-	if (!str)
-		str = L"(null)";
-	len = ft_wstrlen(str);
-	cut = 0;
-	if ((size_t)argument->preci < len)
-	{
-		cut = 1;
-		if (!(str = ft_wstrsub(str, 0, argument->preci)))
-			return ;
-	}
-	len = ft_wstrlen(str);
-	if (!argument->flags->minus && argument->width > 0 && (size_t)argument->width > len)
-		print_spaces(argument->width - len);
-	ft_putwstr(str);
-	if (argument->flags->minus && argument->width > 0 && (size_t)argument->width > len)
-		print_spaces(argument->width - len);
-	if (cut)
-		free(str);
-}
-
-void	print_argument_s(t_argument *argument)
-{
-	size_t	len;
-	char	*str;
-	char	cut;
-
-	if (argument->l)
-		print_wstr(argument);
-	str = va_arg(*argument->va_lst, char*);
+	str = va_arg(*arg->va_arg, char*);
 	if (!str)
 		str = "(null)";
-	len = ft_strlen(str);
+#if 0
+	len = strlen(str);
 	cut = 0;
-	if ((size_t)argument->preci < len)
+	if ((size_t)arg->preci < len)
 	{
 		cut = 1;
-		if (!(str = ft_strsub(str, 0, argument->preci)))
-			return ;
+		if (!(str = ft_strsub(str, 0, arg->preci)))
+			return;
 	}
-	len = ft_strlen(str);
-	if (!argument->flags->minus && argument->width > 0 && (size_t)argument->width > len)
-		print_spaces(argument->width - len);
-	ft_putstr(str);
-	if (argument->flags->minus && argument->width > 0 && (size_t)argument->width > len)
-		print_spaces(argument->width - len);
+	len = strlen(str);
+	if (!(arg->flags & FLAG_MINUS) && arg->width > 0 && (size_t)arg->width > len)
+		print_spaces(buf, arg->width - len);
+#endif
+	print_str(buf, arg, NULL, str);
+#if 0
+	if ((arg->flags & FLAG_MINUS) && arg->width > 0 && (size_t)arg->width > len)
+		print_spaces(arg->width - len);
 	if (cut)
 		free(str);
+#endif
 }
 
-void	print_argument_s_caps(t_argument *argument)
+static void print_u(printf_buf_t *buf, arg_t *arg)
 {
-	argument->ll = 0;
-	argument->l = 1;
-	argument->h = 0;
-	argument->hh = 0;
-	argument->j = 0;
-	argument->z = 0;
-	print_argument_s(argument);
+	char str[64];
+	unsigned long long int val;
+
+	val = get_uint_val(arg);
+	ulltoa(str, val);
+#if 0
+	len = strlen(str);
+	if (!(arg->flags & FLAG_MINUS) && arg->width > 0
+			&& ((arg->preci <= 0 && (size_t)arg->width > len)
+				|| (arg->preci >= 1 && (size_t)arg->width > MAX((size_t)arg->preci, len))))
+		print_spaces(buf, arg->width - (arg->preci <= 0 ? len : MAX((size_t)arg->preci, len)));
+	if (arg->preci > 0 && (size_t)arg->preci > len)
+		print_zeros(buf, argument->preci - len);
+#endif
+	print_str(buf, arg, NULL, str);
+#if 0
+	if ((arg->flags & FLAG_MINUS) && argument->width > 0
+			&& ((arg->preci <= 0 && (size_t)arg->width > len)
+				|| (arg->preci >= 1 && (size_t)arg->width > MAX((size_t)arg->preci, len))))
+		print_spaces(buf, arg->width - (arg->preci <= 0 ? len : MAX((size_t)arg->preci, len)));
+#endif
 }
 
-void	print_argument_spaces(t_argument *arg, size_t len)
+static char *get_x_chars(arg_t *arg)
 {
-	size_t	preci;
-	size_t	width;
-
-	preci = (size_t)arg->preci;
-	width = (size_t)arg->width;
-	if (arg->width > 0 && ((arg->preci <= 0 && width > MAX(preci, len))))
-		print_spaces(arg->width - (arg->preci <= 0 ? len : MAX(preci, len)));
+	if (arg->type == 'X')
+		return "0123456789ABCDEF";
+	return "0123456789abcdef";
 }
 
-static unsigned long long int	get_val(t_argument *argument)
+static void print_x(printf_buf_t *buf, arg_t *arg)
 {
-	if (argument->ll)
-		return (va_arg(*argument->va_lst, unsigned long long int));
-	else if (argument->l)
-		return (va_arg(*argument->va_lst, unsigned long int));
-	else if (argument->hh)
-		return ((unsigned char)va_arg(*argument->va_lst, unsigned int));
-	else if (argument->h)
-		return ((unsigned short int)va_arg(*argument->va_lst, unsigned int));
-	return (va_arg(*argument->va_lst, unsigned int));
-}
+	char str[64];
+	unsigned long long int val;
 
-void	print_argument_u(t_argument *argument)
-{
-	size_t					len;
-	char					*str;
-	unsigned long long int	val;
-
-	val = get_val(argument);
-	if (!(str = ft_ultoa(val)))
-		return ;
-	len = ft_strlen(str);
-	if (!argument->flags->minus && argument->width > 0
-			&& ((argument->preci <= 0 && (size_t)argument->width > len)
-				|| (argument->preci >= 1 && (size_t)argument->width > MAX((size_t)argument->preci, len))))
-		print_spaces(argument->width - (argument->preci <= 0 ? len : MAX((size_t)argument->preci, len)));
-	if (argument->preci > 0 && (size_t)argument->preci > len)
-		print_zeros(argument->preci - len);
-	ft_putstr(str);
-	if (argument->flags->minus && argument->width > 0
-			&& ((argument->preci <= 0 && (size_t)argument->width > len)
-				|| (argument->preci >= 1 && (size_t)argument->width > MAX((size_t)argument->preci, len))))
-		print_spaces(argument->width - (argument->preci <= 0 ? len : MAX((size_t)argument->preci, len)));
-}
-
-void	print_argument_u_caps(t_argument *argument)
-{
-	argument->l = 1;
-	argument->ll = 0;
-	argument->h = 0;
-	argument->hh = 0;
-	argument->j = 0;
-	argument->z = 0;
-	print_argument_u(argument);
-}
-
-static char		*get_chars(t_argument *argument)
-{
-	if (argument->type == 'X')
-		return ("0123456789ABCDEF");
-	return ("0123456789abcdef");
-}
-
-static unsigned long long int	get_val(t_argument *argument)
-{
-	if (argument->ll)
-		return (va_arg(*argument->va_lst, unsigned long long int));
-	else if (argument->l)
-		return (va_arg(*argument->va_lst, unsigned long int));
-	else if (argument->hh)
-		return ((unsigned char)va_arg(*argument->va_lst, unsigned int));
-	else if (argument->h)
-		return ((unsigned short int)va_arg(*argument->va_lst, unsigned int));
-	return (va_arg(*argument->va_lst, unsigned int));
-}
-
-void	print_argument_x(t_argument *argument)
-{
-	size_t					len;
-	char					*str;
-	unsigned long long int	val;
-
-	val = get_val(argument);
-	if (!(str = ft_ultoa_base(val, get_chars(argument))))
-		return ;
-	if (argument->flags->sharp && !(str = ft_strjoin_free2("0x", str)))
-		return ;
-	len = ft_strlen(str);
-	if (!argument->flags->minus && argument->width > 0
-			&& ((argument->preci <= 0 && (size_t)argument->width > len)
-				|| (argument->preci >= 1 && (size_t)argument->width > MAX((size_t)argument->preci, len))))
-		print_spaces(argument->width - (argument->preci <= 0 ? len : MAX((size_t)argument->preci, len)));
-	if (argument->preci > 0 && (size_t)argument->preci > len)
-		print_zeros(argument->preci - len);
-	ft_putstr(str);
-	if (argument->flags->minus && argument->width > 0
-			&& ((argument->preci <= 0 && (size_t)argument->width > len)
-				|| (argument->preci >= 1 && (size_t)argument->width > MAX((size_t)argument->preci, len))))
-		print_spaces(argument->width - (argument->preci <= 0 ? len : MAX((size_t)argument->preci, len)));
-}
-
-void	print_argument_x_caps(t_argument *argument)
-{
-	print_argument_x(argument);
-}
-
-void	print_spaces(size_t len)
-{
-	size_t	count;
-
-	count = 0;
-	while (count < len)
+	val = get_uint_val(arg);
+	ulltoa_base(str, val, get_x_chars(arg));
+#if 0
+	len = strlen(str);
+	if (arg->flags & FLAG_SHARP)
 	{
-		ft_putchar(' ');
-		count++;
+		len += 2;
+		str = ft_strjoin_free2("0x", str);
+		return;
 	}
+	if (!(arg->flags & FLAG_SHARP) && arg->width > 0
+			&& ((arg->preci <= 0 && (size_t)arg->width > len)
+				|| (arg->preci >= 1 && (size_t)arg->width > MAX((size_t)arg->preci, len))))
+		print_spaces(buf, arg->width - (arg->preci <= 0 ? len : MAX((size_t)arg->preci, len)));
+	if (arg->preci > 0 && (size_t)arg->preci > len)
+		print_zeros(buf, arg->preci - len);
+#endif
+	print_str(buf, arg, (arg->flags & FLAG_SHARP) ? "0x" : NULL, str);
+#if 0
+	if ((arg->flags & FLAG_SHARP) && arg->width > 0
+			&& ((arg->preci <= 0 && (size_t)arg->width > len)
+				|| (arg->preci >= 1 && (size_t)arg->width > MAX((size_t)arg->preci, len))))
+		print_spaces(buf, arg->width - (arg->preci <= 0 ? len : MAX((size_t)arg->preci, len)));
+#endif
 }
 
-void	print_zeros(size_t i)
+static void print_X(printf_buf_t *buf, arg_t *arg)
 {
-	size_t	count;
-
-	count = 0;
-	while (count < i)
-	{
-		ft_putchar('0');
-		count++;
-	}
+	print_x(buf, arg);
 }
+
+static void print_p(printf_buf_t *buf, arg_t *arg)
+{
+	arg->flags |= FLAG_SHARP;
+	arg->flags &= ~(FLAG_LL | FLAG_H | FLAG_HH | FLAG_Z | FLAG_J | FLAG_T);
+	print_x(buf, arg);
+}
+
+static void print_mod(printf_buf_t *buf, arg_t *arg)
+{
+	(void)arg;
+	putchar(buf, '%');
+}
+
+static const print_fn_t g_print_fns[256] =
+{
+	['s'] = print_s,
+	['p'] = print_p,
+	['d'] = print_d,
+	['i'] = print_i,
+	['o'] = print_o,
+	['u'] = print_u,
+	['x'] = print_x,
+	['X'] = print_X,
+	['c'] = print_c,
+	['%'] = print_mod,
+};

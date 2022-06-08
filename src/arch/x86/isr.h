@@ -1,4 +1,4 @@
-#ifndef ISR_H
-#define ISR_H
+#ifndef X86_ISR_H
+#define X86_ISR_H
 
 #endif

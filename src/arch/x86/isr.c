@@ -1,36 +1,36 @@
 #include "isr.h"
 
 #include "arch/x86/io.h"
-#include "dev/vga/term.h"
+#include "sys/std.h"
+#include "dev/ps2/ps2.h"
+#include "dev/pit/pit.h"
 
 #include <stdint.h>
 
 static void exception_handler(uint32_t err)
 {
 	(void)err;
-	term_putstr("interrupt unk\n");
+	printf("interrupt unk\n");
 }
 
 static void irq_handler_32(uint32_t err)
 {
 	(void)err;
+	pit_interrupt();
 	outb(0x20, 0x20);
 }
 
 static void irq_handler_33(uint32_t err)
 {
 	(void)err;
-	term_putstr("IRQ 33: ");
-	uint8_t c = inb(0x60);
-	term_putint(c);
-	term_putchar('\n');
+	ps2_interrupt();
 	outb(0x20, 0x20);
 }
 
 static void irq_handler(uint32_t err)
 {
 	(void)err;
-	term_putstr("IRQ\n");
+	printf("IRQ unk\n");
 	outb(0x20, 0x20);
 }
 

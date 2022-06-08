@@ -16,6 +16,7 @@ ISO_NAME = os.iso
 
 SRC_NAME = kernel.c \
            boot.S \
+           shell.c \
            arch/x86/boot.c \
            arch/x86/gdt.c \
            arch/x86/gdt_asm.s \
@@ -23,8 +24,10 @@ SRC_NAME = kernel.c \
            arch/x86/idt_asm.s \
            arch/x86/isr.c \
            dev/pic/pic.c \
-           dev/vga/term.c \
+           dev/vga/vga.c \
            dev/pit/pit.c \
+           dev/com/com.c \
+           dev/ps2/ps2.c \
            sys/string.c \
            sys/printf.c \
 
@@ -61,7 +64,7 @@ $(BIN_NAME): $(OBJ)
 $(ISO_NAME): $(BIN_NAME)
 	@grub-mkrescue -o $@ isodir
 
-run: $(BIN_NAME)
+run: all
 	@qemu-system-i386 -kernel $(BIN_NAME)
 
 odir:
@@ -72,6 +75,8 @@ odir:
 	@mkdir -p $(OBJ_PATH)/dev/pic
 	@mkdir -p $(OBJ_PATH)/dev/vga
 	@mkdir -p $(OBJ_PATH)/dev/pit
+	@mkdir -p $(OBJ_PATH)/dev/com
+	@mkdir -p $(OBJ_PATH)/dev/ps2
 	@mkdir -p $(OBJ_PATH)/sys
 
 clean:
