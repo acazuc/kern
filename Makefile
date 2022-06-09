@@ -23,6 +23,7 @@ SRC_NAME = kernel.c \
            arch/x86/idt.c \
            arch/x86/idt_asm.s \
            arch/x86/isr.c \
+           arch/x86/paging.c \
            dev/pic/pic.c \
            dev/vga/vga.c \
            dev/pit/pit.c \
@@ -30,6 +31,7 @@ SRC_NAME = kernel.c \
            dev/ps2/ps2.c \
            sys/string.c \
            sys/printf.c \
+           sys/malloc.c \
 
 SRC_PATH = src
 
@@ -65,7 +67,7 @@ $(ISO_NAME): $(BIN_NAME)
 	@grub-mkrescue -o $@ isodir
 
 run: all
-	@qemu-system-i386 -kernel $(BIN_NAME)
+	@qemu-system-i386 -m 1024 -soundhw pcspk -kernel $(BIN_NAME)
 
 odir:
 	@mkdir -p $(OBJ_PATH)

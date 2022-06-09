@@ -5,8 +5,10 @@ isr_%+%1:
 	pushad
 	cld
 	push eax
-	mov eax, [exception_handlers + 4 * %+%1]
-	call eax
+	push %1
+	call handle_exception
+	pop eax
+	pop eax
 	popad
 	sti
 	iret
@@ -18,15 +20,16 @@ isr_%+%1:
 	pushad
 	cld
 	push 0
-	mov eax, [exception_handlers + 4 * %+%1]
-	call eax
+	push %1
+	call handle_exception
+	pop eax
 	pop eax
 	popad
 	sti
 	iret
 %endmacro
 
-extern exception_handlers
+extern handle_exception
 
 isr_no_err 0
 isr_no_err 1

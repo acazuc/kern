@@ -1,4 +1,4 @@
-#include "isr.h"
+#include "x86.h"
 
 #include "arch/x86/io.h"
 #include "sys/std.h"
@@ -7,10 +7,69 @@
 
 #include <stdint.h>
 
-static void exception_handler(uint32_t err)
+static void (*g_exception_handlers[256])(uint32_t);
+
+static void handle_divide_by_zero(uint32_t err)
 {
 	(void)err;
-	printf("interrupt unk\n");
+	printf("divide by zero\n");
+	panic();
+}
+
+static void handle_debug(uint32_t err)
+{
+	(void)err;
+	printf("debug\n");
+	panic();
+}
+
+static void handle_nmi(uint32_t err)
+{
+	(void)err;
+	printf("non maskable interrupt\n");
+	panic();
+}
+
+static void handle_breakpoint(uint32_t err)
+{
+	(void)err;
+	printf("breakpoint\n");
+	panic();
+}
+
+static void handle_overflow(uint32_t err)
+{
+	(void)err;
+	printf("overflow\n");
+	panic();
+}
+
+static void handle_bound_range_exceeded(uint32_t err)
+{
+	(void)err;
+	printf("bound range exceeded\n");
+	panic();
+}
+
+static void handle_invalid_opcode(uint32_t err)
+{
+	(void)err;
+	printf("invalid opcode\n");
+	panic();
+}
+
+static void handle_page_fault(uint32_t err)
+{
+	uint32_t page_addr;
+	__asm__ volatile ("mov %%cr2, %0" : "=a"(page_addr));
+	if (!(err & 1))
+	{
+		paging_alloc((void*)page_addr);
+		//panic();
+		return;
+	}
+	printf("page protection violation @ %08lx: %08lx\n", page_addr, err);
+	panic();
 }
 
 static void irq_handler_32(uint32_t err)
@@ -27,269 +86,31 @@ static void irq_handler_33(uint32_t err)
 	outb(0x20, 0x20);
 }
 
-static void irq_handler(uint32_t err)
+void handle_exception(uint32_t id, uint32_t err)
 {
-	(void)err;
-	printf("IRQ unk\n");
-	outb(0x20, 0x20);
+	if (id >= 256)
+	{
+		printf("invalid exception id: %08lx (err: %08lx)\n", id, err);
+		panic();
+	}
+	if (!g_exception_handlers[id])
+	{
+		printf("unhandled exception %02lx (err: %08lx)\n", id, err);
+		panic();
+	}
+	g_exception_handlers[id](err);
 }
 
-void (*exception_handlers[256])(uint32_t) =
+static void (*g_exception_handlers[256])(uint32_t) =
 {
-	exception_handler, /* 0 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 10 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 20 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 30 */
-	exception_handler,
-	irq_handler_32,
-	irq_handler_33,
-	irq_handler,
-	irq_handler,
-	irq_handler,
-	irq_handler,
-	irq_handler,
-	irq_handler,
-	irq_handler,/* 40 */
-	irq_handler,
-	irq_handler,
-	irq_handler,
-	irq_handler,
-	irq_handler,
-	irq_handler,
-	irq_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 50 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 60 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 70 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 80 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 90 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 100 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 110 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 120 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 130 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 140 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 150 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 160 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 170 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 180 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 190 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 200 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 210 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 220 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 230 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 240 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler, /* 250 */
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
-	exception_handler,
+	[0x0]  = handle_divide_by_zero,
+	[0x1]  = handle_debug,
+	[0x2]  = handle_nmi,
+	[0x3]  = handle_breakpoint,
+	[0x4]  = handle_overflow,
+	[0x5]  = handle_bound_range_exceeded,
+	[0x6]  = handle_invalid_opcode,
+	[0xE]  = handle_page_fault,
+	[0x20] = irq_handler_32,
+	[0x21] = irq_handler_33,
 };

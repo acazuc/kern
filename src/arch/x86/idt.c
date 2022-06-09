@@ -1,4 +1,4 @@
-#include "idt.h"
+#include "x86.h"
 
 extern void *g_isr_table[];
 

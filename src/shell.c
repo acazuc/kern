@@ -27,7 +27,6 @@ static void reset_input(void)
 		vga_set_char(i, VGA_HEIGHT - 1, ' ', color);
 	g_input_col = INPUT_PREFIX_LEN;
 	g_input[g_input_col] = '\0';
-	vga_set_cursor(g_input_col, g_input_row);
 }
 
 void shell_char_evt(const kbd_char_evt_t *evt)
@@ -40,7 +39,6 @@ void shell_char_evt(const kbd_char_evt_t *evt)
 	vga_set_char(g_input_col, g_input_row, evt->utf8[0], g_input_color);
 	g_input[g_input_col++] = evt->utf8[0];
 	g_input[g_input_col] = '\0';
-	vga_set_cursor(g_input_col, g_input_row);
 }
 
 static void print_time(void)
@@ -96,8 +94,6 @@ void shell_input_init()
 		vga_set_char(i, VGA_HEIGHT - 1, INPUT_PREFIX[i], vga_entry_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK));
 	g_input[0] = '\0';
 	g_input_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-	vga_enable_cursor();
-	vga_set_cursor(g_input_col, g_input_row);
 	g_input_init = true;
 	g_first_char = true;
 }
@@ -126,6 +122,12 @@ void shell_putchar(char c)
 	{
 		scroll_up();
 		g_row--;
+		g_col = 0;
+	}
+
+	if (g_col == VGA_WIDTH - 1)
+	{
+		scroll_up();
 		g_col = 0;
 	}
 

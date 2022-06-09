@@ -14,7 +14,6 @@ struct timespec
 };
 
 void *memset(void *d, int c, size_t n);
-void bzero(void *d, size_t n);
 void *memcpy(void *d, const void *s, size_t n);
 void *memccpy(void *d, const void *s, int c, size_t n);
 void *memmove(void *d, const void *s, size_t n);
@@ -56,6 +55,11 @@ int vprintf(const char *fmt, va_list va_arg);
 int printf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 int vsnprintf(char *d, size_t n, const char *fmt, va_list va_arg);
 int snprintf(char *d, size_t n, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
+
+void *malloc(size_t size);
+void free(void *ptr);
+void *calloc(size_t nmemb, size_t size);
+void *realloc(void *ptr, size_t size);
 
 void panic();
 

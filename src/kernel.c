@@ -3,6 +3,8 @@
 #include "sys/std.h"
 #include "shell.h"
 
+#include "arch/x86/io.h"
+
 void panic()
 {
 infl:

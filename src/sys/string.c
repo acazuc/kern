@@ -10,12 +10,6 @@ void *memset(void *d, int c, size_t len)
 	return d;
 }
 
-void bzero(void *d, size_t n)
-{
-	for (size_t i = 0; i < n; ++i)
-		((uint8_t*)d)[i] = 0;
-}
-
 void *memcpy(void *d, const void *s, size_t n)
 {
 	for (size_t i = 0; i < n; ++i)

@@ -1,4 +1,4 @@
-#include "gdt.h"
+#include "x86.h"
 
 typedef struct gdt_entry
 {

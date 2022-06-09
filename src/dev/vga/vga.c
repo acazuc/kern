@@ -45,7 +45,7 @@ static inline uint16_t vga_entry(unsigned char uc, uint8_t color)
 
 void vga_init()
 {
-	uint16_t clear_entry = vga_entry(' ', vga_entry_color(VGA_COLOR_BLACK, VGA_COLOR_BLACK));
+	uint16_t clear_entry = vga_entry(' ', vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
 	for (size_t i = 0; i < VGA_WIDTH * VGA_HEIGHT; ++i)
 		VGA_PTR[i] = clear_entry;
 }
