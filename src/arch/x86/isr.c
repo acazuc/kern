@@ -12,50 +12,43 @@ static void (*g_exception_handlers[256])(uint32_t);
 static void handle_divide_by_zero(uint32_t err)
 {
 	(void)err;
-	printf("divide by zero\n");
-	panic();
+	panic("divide by zero\n");
 }
 
 static void handle_debug(uint32_t err)
 {
 	(void)err;
-	printf("debug\n");
-	panic();
+	panic("debug\n");
 }
 
 static void handle_nmi(uint32_t err)
 {
 	(void)err;
-	printf("non maskable interrupt\n");
-	panic();
+	panic("non maskable interrupt\n");
 }
 
 static void handle_breakpoint(uint32_t err)
 {
 	(void)err;
-	printf("breakpoint\n");
-	panic();
+	panic("breakpoint\n");
 }
 
 static void handle_overflow(uint32_t err)
 {
 	(void)err;
-	printf("overflow\n");
-	panic();
+	panic("overflow\n");
 }
 
 static void handle_bound_range_exceeded(uint32_t err)
 {
 	(void)err;
-	printf("bound range exceeded\n");
-	panic();
+	panic("bound range exceeded\n");
 }
 
 static void handle_invalid_opcode(uint32_t err)
 {
 	(void)err;
-	printf("invalid opcode\n");
-	panic();
+	panic("invalid opcode\n");
 }
 
 static void handle_page_fault(uint32_t err)
@@ -64,12 +57,10 @@ static void handle_page_fault(uint32_t err)
 	__asm__ volatile ("mov %%cr2, %0" : "=a"(page_addr));
 	if (!(err & 1))
 	{
-		paging_alloc((void*)page_addr);
-		//panic();
+		paging_alloc(page_addr);
 		return;
 	}
-	printf("page protection violation @ %08lx: %08lx\n", page_addr, err);
-	panic();
+	panic("page protection violation @ %08lx: %08lx\n", page_addr, err);
 }
 
 static void irq_handler_32(uint32_t err)
@@ -89,15 +80,9 @@ static void irq_handler_33(uint32_t err)
 void handle_exception(uint32_t id, uint32_t err)
 {
 	if (id >= 256)
-	{
-		printf("invalid exception id: %08lx (err: %08lx)\n", id, err);
-		panic();
-	}
+		panic("invalid exception id: %08lx (err: %08lx)\n", id, err);
 	if (!g_exception_handlers[id])
-	{
-		printf("unhandled exception %02lx (err: %08lx)\n", id, err);
-		panic();
-	}
+		panic("unhandled exception %02lx (err: %08lx)\n", id, err);
 	g_exception_handlers[id](err);
 }
 

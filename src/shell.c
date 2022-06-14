@@ -3,6 +3,8 @@
 #include "dev/vga/vga.h"
 #include "sys/std.h"
 #include "dev/pit/pit.h"
+#include "dev/com/com.h"
+#include "arch/arch.h"
 
 #include <stddef.h>
 #include <stdbool.h>
@@ -26,6 +28,7 @@ static void reset_input(void)
 	for (size_t i = INPUT_PREFIX_LEN; i < VGA_WIDTH; ++i)
 		vga_set_char(i, VGA_HEIGHT - 1, ' ', color);
 	g_input_col = INPUT_PREFIX_LEN;
+	vga_set_cursor(g_input_col, g_input_row);
 	g_input[g_input_col] = '\0';
 }
 
@@ -39,6 +42,7 @@ void shell_char_evt(const kbd_char_evt_t *evt)
 	vga_set_char(g_input_col, g_input_row, evt->utf8[0], g_input_color);
 	g_input[g_input_col++] = evt->utf8[0];
 	g_input[g_input_col] = '\0';
+	vga_set_cursor(g_input_col, g_input_row);
 }
 
 static void print_time(void)
@@ -65,6 +69,14 @@ void shell_key_evt(const kbd_key_evt_t *evt)
 				pit_gettime(&ts);
 				printf("%llu.%09llu\n", ts.tv_sec, ts.tv_nsec);
 			}
+			else if (!strcmp(cmd, "mem"))
+			{
+				show_alloc_mem();
+			}
+			else if (!strcmp(cmd, "panic"))
+			{
+				panic("shell\n");
+			}
 			else
 			{
 				shell_putstr("unknown command: ");
@@ -81,6 +93,7 @@ void shell_key_evt(const kbd_key_evt_t *evt)
 			g_input_col--;
 			g_input[g_input_col] = '\0';
 			vga_set_char(g_input_col, g_input_row, ' ', vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+			vga_set_cursor(g_input_col, g_input_row);
 		}
 		return;
 	}
@@ -96,6 +109,8 @@ void shell_input_init()
 	g_input_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 	g_input_init = true;
 	g_first_char = true;
+	vga_enable_cursor();
+	vga_set_cursor(g_input_col, g_input_row);
 }
 
 void shell_init()
@@ -136,6 +151,10 @@ void shell_putchar(char c)
 		g_first_char = false;
 		print_time();
 	}
+
+	com_putchar(c);
+	if (c == '\n')
+		com_putchar('\r');
 
 	if (c == '\n')
 	{

@@ -5,6 +5,9 @@
 #include <stdarg.h>
 #include <stdint.h>
 
+#define QUOTEME_(x) #x
+#define QUOTEME(x) QUOTEME_(x)
+
 typedef uint64_t time_t;
 
 struct timespec
@@ -58,9 +61,8 @@ int snprintf(char *d, size_t n, const char *fmt, ...) __attribute__((format(prin
 
 void *malloc(size_t size);
 void free(void *ptr);
-void *calloc(size_t nmemb, size_t size);
+void *zalloc(size_t size);
 void *realloc(void *ptr, size_t size);
-
-void panic();
+void show_alloc_mem(void);
 
 #endif

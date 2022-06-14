@@ -194,6 +194,23 @@ static const uint32_t g_scancodes[KBD_KEY_LAST * 2] =
 	0x37, 0x37,
 	0x38, 0x38,
 	0x39, 0x39,
+	[KBD_KEY_MINUS * 2]     = 0x2D, 0x5F,
+	[KBD_KEY_EQUAL * 2]     = 0x3D, 0x2B,
+	[KBD_KEY_LBRACKET * 2]  = 0x5B, 0x7B,
+	[KBD_KEY_RBRACKET * 2]  = 0x5D, 0x7D,
+	[KBD_KEY_SEMICOLON * 2] = 0x3B, 0x3A,
+	[KBD_KEY_SQUOTE * 2]    = 0x27, 0x22,
+	[KBD_KEY_TILDE * 2]     = 0x60, 0x7E,
+	[KBD_KEY_ANTISLASH * 2] = 0x5C, 0x7C,
+	[KBD_KEY_COMMA * 2]     = 0x2C, 0x3C,
+	[KBD_KEY_DOT * 2]       = 0x2E, 0x3E,
+	[KBD_KEY_SLASH * 2]     = 0x2F, 0x3F,
+	[KBD_KEY_SPACE * 2]     = 0x20, 0x20,
+	[KBD_KEY_KP_MULT * 2]   = 0x2A, 0x2A,
+	[KBD_KEY_KP_MINUS * 2]  = 0x2D, 0x2D,
+	[KBD_KEY_KP_PLUS * 2]   = 0x2B, 0x2B,
+	[KBD_KEY_KP_DOT * 2]    = 0x2E, 0x2E,
+	[KBD_KEY_KP_SLASH * 2]  = 0x2F, 0x2F,
 };
 
 static uint8_t g_kbd_buffer[6];

@@ -6,22 +6,22 @@ BOOT_ASM = i686-elf-as
 
 LD = i686-elf-gcc
 
-CFLAGS = -ffreestanding -O2 -Wall -Wextra -mno-red-zone
+CFLAGS = -ffreestanding -O0 -Wall -Wextra -fno-builtin -fno-stack-protector
 
-LDFLAGS = -ffreestanding -O2 -nostdlib
+LDFLAGS = -ffreestanding -nostdlib -nodefaultlibs
 
 BIN_NAME = os.bin
 
 ISO_NAME = os.iso
 
 SRC_NAME = kernel.c \
-           boot.S \
            shell.c \
+           arch/x86/boot.S \
            arch/x86/boot.c \
            arch/x86/gdt.c \
-           arch/x86/gdt_asm.s \
+           arch/x86/gdt.s \
            arch/x86/idt.c \
-           arch/x86/idt_asm.s \
+           arch/x86/idt.s \
            arch/x86/isr.c \
            arch/x86/paging.c \
            dev/pic/pic.c \
@@ -37,9 +37,9 @@ SRC_PATH = src
 
 SRC = $(addprefix $(SRC_PATH)/, $(SRC_NAME))
 
-OBJ_NAME1  = $(SRC_NAME:.c=.o)
-OBJ_NAME2  = $(OBJ_NAME1:.s=.o)
-OBJ_NAME   = $(OBJ_NAME2:.S=.o)
+OBJ_NAME1 = $(SRC_NAME:.c=.c.o)
+OBJ_NAME2 = $(OBJ_NAME1:.s=.s.o)
+OBJ_NAME  = $(OBJ_NAME2:.S=.S.o)
 
 OBJ_PATH = obj
 
@@ -47,15 +47,15 @@ OBJ = $(addprefix $(OBJ_PATH)/, $(OBJ_NAME))
 
 all: odir $(ISO_NAME)
 
-$(OBJ_PATH)/%.o: $(SRC_PATH)/%.c
+$(OBJ_PATH)/%.c.o: $(SRC_PATH)/%.c
 	@echo "CC $<"
 	@$(CC) -c $< -o $@ -std=gnu99 $(CFLAGS) -I $(SRC_PATH)
 
-$(OBJ_PATH)/%.o: $(SRC_PATH)/%.s
+$(OBJ_PATH)/%.s.o: $(SRC_PATH)/%.s
 	@echo "ASM $<"
 	@$(ASM) $< -o $@
 
-$(OBJ_PATH)/%.o: $(SRC_PATH)/%.S
+$(OBJ_PATH)/%.S.o: $(SRC_PATH)/%.S
 	@echo "ASM $<"
 	@$(BOOT_ASM) $< -o $@
 
@@ -64,6 +64,7 @@ $(BIN_NAME): $(OBJ)
 	@$(LD) -T linker.ld -o $@ $(LDFLAGS) $^ -lgcc
 
 $(ISO_NAME): $(BIN_NAME)
+	@mkdir -p isodir
 	@grub-mkrescue -o $@ isodir
 
 run: all

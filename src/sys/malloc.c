@@ -1,16 +1,15 @@
 #include "std.h"
 
-#if 0
+#include "arch/arch.h"
 
-#define PAGE_SIZE 128
+#include <stdbool.h>
 
-#define TINY_SIZE 128
-#define SMALL_SIZE 1024
+#define BLOCKS_SIZE ((PAGE_SIZE + 31) / 32)
+#define PAGE_SIZE 1024
 
 #define MALLOC_LOCK()
 #define MALLOC_UNLOCK()
 
-typedef struct page_list page_list_t;
 typedef struct page page_t;
 
 enum block_type
@@ -20,497 +19,79 @@ enum block_type
 	BLOCK_LARGE,
 };
 
+static const char *g_block_str[] =
+{
+	"TINY",
+	"SMALL",
+	"LARGE"
+};
+
+static const uint32_t g_block_sizes[] =
+{
+	128,
+	1024,
+	0
+};
+
+static const uint32_t g_page_sizes[] =
+{
+	128 * PAGE_SIZE,
+	1024 * PAGE_SIZE,
+	0
+};
+
 struct page
 {
 	enum block_type type;
-	size_t len;
-	void *addr;
-	int blocks[PAGE_SIZE];
+	size_t size;
+	uint8_t *addr;
+	uint32_t blocks[BLOCKS_SIZE];
+	page_t *next;
 };
 
-struct page_list
+static page_t *g_pages;
+
+static enum block_type get_block_type(size_t size)
 {
-	page_t page;
-	page_list_t *next;
-};
-
-page_list_t *g_pages;
-
-page_list_t *alloc_page(enum block_type type, size_t len)
-{
-	t_page_list	*new;
-
-	if (!(new = mmap(0, getpagesize_mult(len + sizeof(*new))
-					, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0)))
-		return (NULL);
-	new->page.type = type;
-	new->page.len = len + sizeof(*new);
-	new->page.addr = new;
-	new->page.addr += sizeof(*new);
-	new->next = NULL;
-	if (type == TINY || type == SMALL)
-		memset(new->page.blocks, 0, sizeof(new->page.blocks);
-	return new;
+	if (size <= g_block_sizes[BLOCK_TINY])
+		return BLOCK_TINY;
+	if (size <= g_block_sizes[BLOCK_SMALL])
+		return BLOCK_SMALL;
+	return BLOCK_LARGE;
 }
 
-void *calloc(size_t nmemb, size_t size)
+static page_t *alloc_page(enum block_type type, size_t size)
 {
-	char *addr = malloc(nmemb * size);
-	if (addr)
-		memset(addr, 0, nmemb * size);
-	return addr;
+	page_t *page;
+	size_t alloc_size;
+
+	alloc_size = (size + sizeof(*page) + 4095) & ~(0xFFF);
+	page = vmalloc(alloc_size);
+	if (!page)
+		return NULL;
+	page->type = type;
+	page->size = alloc_size;
+	page->addr = (uint8_t*)page + sizeof(*page);
+	page->next = NULL;
+	if (type == BLOCK_TINY || type == BLOCK_SMALL)
+		memset(page->blocks, 0, sizeof(page->blocks));
+	return page;
 }
 
-t_page_list		*g_pages;
-
-static int	is_page_free(t_page *page)
+static bool is_page_free(page_t *page)
 {
-	int		i;
-
-	i = 0;
-	while (i < PAGE_SIZE)
+	for (size_t i = 0; i < BLOCKS_SIZE; ++i)
 	{
 		if (page->blocks[i])
-			return (0);
-		++i;
+			return false;
 	}
-	return (1);
+	return true;
 }
 
-void		check_free_pages(t_block_type type)
+static void remove_page(page_t *page)
 {
-	t_page_list		*lst;
-	int				one_free;
-
-	one_free = 0;
-	lst = g_pages;
-	while (lst)
-	{
-		if (lst->page.type == type && is_page_free(&lst->page))
-		{
-			if (!one_free)
-				one_free = 1;
-			else
-			{
-				remove_page(lst);
-				munmap(lst, get_block_size(lst->page.type));
-			}
-		}
-		lst = lst->next;
-	}
-}
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   create_new_block.c                                 :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: acazuc <acazuc@student.42.fr>              +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2016/02/16 11:24:50 by acazuc            #+#    #+#             */
-/*   Updated: 2016/09/29 16:27:37 by acazuc           ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
-#include "malloc.h"
-
-void		*create_new_block(t_block_type type, size_t len)
-{
-	t_page_list		*new;
-
-	if (!(new = alloc_page(type, type == LARGE ? len : get_page_size(type))))
-		return (NULL);
-	new->page.blocks[0] = 1;
-	push_new_page(new);
-	return (new->page.addr);
-}
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   free.c                                             :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: acazuc <acazuc@student.42.fr>              +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2016/02/16 13:11:39 by acazuc            #+#    #+#             */
-/*   Updated: 2016/09/30 12:16:33 by acazuc           ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
-#include "malloc.h"
-
-t_page_list		*g_pages;
-pthread_mutex_t	g_malloc_mutex;
-
-static int		case_large(void *addr, t_page_list *prv, t_page_list *lst)
-{
-	if (addr == lst->page.addr)
-	{
-		if (prv)
-			prv->next = lst->next;
-		else
-			g_pages = lst->next;
-		munmap(lst, lst->page.len);
-		MALLOC_UNLOCK();
-		return (1);
-	}
-	return (0);
-}
-
-static void		case_else(void *addr, t_page_list *lst)
-{
-	int			item;
-
-	item = (addr - lst->page.addr) / get_block_size(lst->page.type);
-	if (lst->page.addr + get_block_size(lst->page.type) * item == addr)
-	{
-		lst->page.blocks[item] = 0;
-		check_free_pages(lst->page.type);
-	}
-	MALLOC_UNLOCK();
-}
-
-void			free(void *addr)
-{
-	t_page_list	*prv;
-	t_page_list	*lst;
-
-	if (!addr)
-		return ;
-	MALLOC_LOCK();
-	prv = NULL;
-	lst = g_pages;
-	while (lst)
-	{
-		if (lst->page.type == LARGE && case_large(addr, prv, lst))
-			return ;
-		else if (lst->page.type != LARGE && addr >= lst->page.addr
-				&& addr <= lst->page.addr + get_page_size(lst->page.type))
-		{
-			case_else(addr, lst);
-			return ;
-		}
-		prv = lst;
-		lst = lst->next;
-	}
-	MALLOC_UNLOCK();
-}
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   get_block_size.c                                   :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: acazuc <acazuc@student.42.fr>              +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2016/02/16 10:09:18 by acazuc            #+#    #+#             */
-/*   Updated: 2016/02/16 10:09:59 by acazuc           ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
-#include "malloc.h"
-
-size_t	get_block_size(t_block_type type)
-{
-	if (type == TINY)
-		return (TINY_SIZE);
-	return (SMALL_SIZE);
-}
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   get_block_type.c                                   :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: acazuc <acazuc@student.42.fr>              +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2016/02/15 13:40:56 by acazuc            #+#    #+#             */
-/*   Updated: 2016/02/15 13:42:22 by acazuc           ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
-#include "malloc.h"
-
-t_block_type	get_block_type(size_t len)
-{
-	if (len <= TINY_SIZE)
-		return (TINY);
-	else if (len <= SMALL_SIZE)
-		return (SMALL);
-	return (LARGE);
-}
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   get_existing_block.c                               :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: acazuc <acazuc@student.42.fr>              +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2016/02/15 13:51:03 by acazuc            #+#    #+#             */
-/*   Updated: 2016/09/29 15:26:04 by acazuc           ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
-#include "malloc.h"
-
-t_page_list		*g_pages;
-
-static int		get_first_free(t_page *page)
-{
-	int				i;
-
-	i = 0;
-	while (i < PAGE_SIZE)
-	{
-		if (page->blocks[i] == 0)
-			return (i);
-		i++;
-	}
-	return (-1);
-}
-
-void			*get_existing_block(t_block_type type)
-{
-	t_page_list		*lst;
-	int				i;
-
-	lst = g_pages;
-	while (lst)
-	{
-		if (lst->page.type == type && (i = get_first_free(&lst->page)) != -1)
-		{
-			lst->page.blocks[i] = 1;
-			return (lst->page.addr + i * get_block_size(type));
-		}
-		lst = lst->next;
-	}
-	return (NULL);
-}
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   get_page_size.c                                    :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: acazuc <acazuc@student.42.fr>              +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2016/02/15 14:57:30 by acazuc            #+#    #+#             */
-/*   Updated: 2016/02/15 15:18:42 by acazuc           ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
-#include "malloc.h"
-
-size_t		get_page_size(t_block_type type)
-{
-	if (type == TINY)
-		return (TINY_SIZE * PAGE_SIZE);
-	return (SMALL_SIZE * PAGE_SIZE);
-}
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   getpagesize_mult.c                                 :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: acazuc <acazuc@student.42.fr>              +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2016/09/29 14:35:30 by acazuc            #+#    #+#             */
-/*   Updated: 2016/09/29 14:36:46 by acazuc           ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
-#include "malloc.h"
-
-size_t	getpagesize_mult(size_t len)
-{
-	if (len % getpagesize() == 0)
-		return (len);
-	return (((len / getpagesize()) + 1) * getpagesize());
-}
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   malloc.c                                           :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: acazuc <acazuc@student.42.fr>              +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2016/02/15 13:39:20 by acazuc            #+#    #+#             */
-/*   Updated: 2016/09/30 12:16:20 by acazuc           ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
-#include "malloc.h"
-
-t_page_list		*g_pages = NULL;
-pthread_mutex_t	g_malloc_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-static void		*return_enomem(void *ptr)
-{
-	if (ptr == NULL)
-		errno = ENOMEM;
-	MALLOC_UNLOCK();
-	return (ptr);
-}
-
-void			*malloc(size_t len)
-{
-	t_block_type	type;
-	void			*addr;
-
-	MALLOC_LOCK();
-	if (len == 0)
-		return (return_enomem(NULL));
-	type = get_block_type(len);
-	if (type == LARGE || !(addr = get_existing_block(type)))
-	{
-		if (!(addr = create_new_block(type, len)))
-			return (return_enomem(NULL));
-	}
-	return (return_enomem(addr));
-}
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   push_new_page.c                                    :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: acazuc <acazuc@student.42.fr>              +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2016/02/15 15:10:28 by acazuc            #+#    #+#             */
-/*   Updated: 2016/02/22 10:11:21 by acazuc           ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
-#include "malloc.h"
-
-t_page_list		*g_pages;
-
-void	push_new_page(t_page_list *new)
-{
-	t_page_list		*lst;
-
-	if (!g_pages)
-		g_pages = new;
-	else
-	{
-		lst = g_pages;
-		while (lst->next)
-			lst = lst->next;
-		lst->next = new;
-	}
-}
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   realloc.c                                          :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: acazuc <acazuc@student.42.fr>              +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2016/02/22 10:49:17 by acazuc            #+#    #+#             */
-/*   Updated: 2016/09/30 12:15:45 by acazuc           ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
-#include "malloc.h"
-
-t_page_list		*g_pages;
-pthread_mutex_t	g_malloc_mutex;
-
-static void	*return_enomem(void *addr)
-{
-	if (addr == NULL)
-		errno = ENOMEM;
-	return (addr);
-}
-
-void		*realloc_large(t_page_list *lst, void *ptr, size_t len)
-{
-	size_t	i;
-	void	*addr;
-
-	if (!(addr = create_new_block(LARGE, len)))
-	{
-		MALLOC_UNLOCK();
-		return (return_enomem(NULL));
-	}
-	i = 0;
-	while (i < len && i < lst->page.len - sizeof(*lst))
-	{
-		((unsigned char*)addr)[i] = ((unsigned char*)ptr)[i];
-		i++;
-	}
-	remove_page(lst);
-	munmap(lst, lst->page.len);
-	MALLOC_UNLOCK();
-	return (return_enomem(addr));
-}
-
-void		*realloc_small_tiny(t_page_list *lst, void *ptr, size_t len)
-{
-	size_t	i;
-	void	*addr;
-
-	if (len <= get_block_size(lst->page.type))
-	{
-		MALLOC_UNLOCK();
-		return (return_enomem(ptr));
-	}
-	if (!(addr = create_new_block(get_block_type(len), len)))
-	{
-		MALLOC_UNLOCK();
-		return (return_enomem(NULL));
-	}
-	i = 0;
-	while (i < len && i < lst->page.len - sizeof(*lst))
-	{
-		((unsigned char*)addr)[i] = ((unsigned char*)ptr)[i];
-		i++;
-	}
-	free(ptr);
-	MALLOC_UNLOCK();
-	return (return_enomem(addr));
-}
-
-void		*realloc(void *addr, size_t len)
-{
-	t_page_list	*lst;
-	int			item;
-
-	if (addr == NULL)
-		return (malloc(len));
-	MALLOC_LOCK();
-	lst = g_pages;
-	while (lst)
-	{
-		if (lst->page.type == LARGE && addr == lst->page.addr)
-			return (realloc_large(lst, addr, len));
-		else if (lst->page.type != LARGE && addr >= lst->page.addr
-				&& addr <= lst->page.addr + get_page_size(lst->page.type))
-		{
-			item = (addr - lst->page.addr) / get_block_size(lst->page.type);
-			if (lst->page.addr + get_block_size(lst->page.type) * item == addr)
-				return (realloc_small_tiny(lst, addr, len));
-			return (return_enomem(NULL));
-		}
-		lst = lst->next;
-	}
-	MALLOC_UNLOCK();
-	return (return_enomem(NULL));
-}
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   remove_page.c                                      :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: acazuc <acazuc@student.42.fr>              +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2016/02/22 11:09:43 by acazuc            #+#    #+#             */
-/*   Updated: 2016/02/22 11:13:27 by acazuc           ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
-#include "malloc.h"
-
-t_page_list	*g_pages;
-
-void	remove_page(t_page_list *page)
-{
-	t_page_list	*prv;
-	t_page_list	*lst;
+	page_t *prv;
+	page_t *lst;
 
 	prv = NULL;
 	lst = g_pages;
@@ -528,109 +109,287 @@ void	remove_page(t_page_list *page)
 		lst = lst->next;
 	}
 }
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   show_alloc_mem_2.c                                 :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: acazuc <acazuc@student.42.fr>              +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2016/02/22 10:45:57 by acazuc            #+#    #+#             */
-/*   Updated: 2016/02/22 10:47:34 by acazuc           ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
 
-#include "malloc.h"
-
-void		putaddrchar(char c)
+static void check_free_pages(enum block_type type)
 {
-	if (c > 9)
-		ft_putchar(c - 10 + 'a');
-	else
-		ft_putchar(c + '0');
-}
-
-void		putaddr(size_t addr)
-{
-	if ((size_t)addr > 15)
+	bool one_free = false;
+	for (page_t *lst = g_pages; lst;)
 	{
-		putaddr(addr / 16);
-		putaddr(addr % 16);
+		if (lst->type != type || !is_page_free(lst))
+		{
+			lst = lst->next;
+			continue;
+		}
+		if (!one_free)
+		{
+			one_free = true;
+			lst = lst->next;
+			continue;
+		}
+		page_t *nxt = lst->next;
+		remove_page(lst);
+		vfree(lst, lst->size);
+		lst = nxt;
 	}
-	else
-		putaddrchar((char)(addr % 16));
 }
 
-
-static void			print_block(size_t start, size_t end, size_t len)
+static void push_new_page(page_t *new)
 {
-	ft_putstr("0x");
-	putaddr(start);
-	ft_putstr(" - 0x");
-	putaddr(end);
-	ft_putstr(" : ");
-	ft_putnbr(len);
-	ft_putendl(" octets");
+	if (!g_pages)
+	{
+		g_pages = new;
+		return;
+	}
+
+	page_t *lst = g_pages;
+	while (lst->next)
+		lst = lst->next;
+	lst->next = new;
 }
 
-static void			c_e(void **start, void *end, size_t *total)
+static void *create_new_block(enum block_type type, size_t size)
+{
+	page_t *page;
+
+	page = alloc_page(type, type == BLOCK_LARGE ? size : g_page_sizes[type]);
+	if (!page)
+		return NULL;
+	page->blocks[0] = 1;
+	push_new_page(page);
+	return page->addr;
+}
+
+static int get_first_free(page_t *page)
+{
+	for (size_t i = 0; i < BLOCKS_SIZE; ++i)
+	{
+		if (page->blocks[i] == 0xFFFFFFFF)
+			continue;
+		uint32_t block = page->blocks[i];
+		for (uint32_t j = 0; j < 32; ++j)
+		{
+			if (!(block & (1 << j)))
+				return i * 32 + j;
+		}
+		panic("block != 0xFFFFFFFF but no bit found");
+	}
+	return -1;
+}
+
+static void *get_existing_block(enum block_type type)
+{
+	for (page_t *lst = g_pages; lst; lst = lst->next)
+	{
+		int i;
+		if (lst->type == type && (i = get_first_free(lst)) != -1)
+		{
+			lst->blocks[i / 32] |= (1 << i % 32);
+			return lst->addr + i * g_block_sizes[type];
+		}
+	}
+	return NULL;
+}
+
+static void *realloc_large(page_t *lst, void *ptr, size_t size)
+{
+	void *addr;
+	size_t len;
+
+	addr = create_new_block(BLOCK_LARGE, size);
+	if (!addr)
+	{
+		MALLOC_UNLOCK();
+		return NULL;
+	}
+	len = lst->size - sizeof(*lst);
+	if (size < len)
+		len = size;
+	memcpy(addr, ptr, len);
+	remove_page(lst);
+	vfree(lst, lst->size);
+	MALLOC_UNLOCK();
+	return addr;
+}
+
+static void *realloc_small_tiny(page_t *lst, void *ptr, size_t size)
+{
+	void *addr;
+	size_t len;
+
+	if (size <= g_block_sizes[lst->type])
+	{
+		MALLOC_UNLOCK();
+		return ptr;
+	}
+	addr = create_new_block(get_block_type(size), size);
+	if (!addr)
+	{
+		MALLOC_UNLOCK();
+		return NULL;
+	}
+	len = lst->size - sizeof(*lst);
+	if (size < len)
+		len = size;
+	memcpy(addr, ptr, len);
+	free(ptr);
+	MALLOC_UNLOCK();
+	return addr;
+}
+
+void *malloc(size_t size)
+{
+	enum block_type type;
+	void *addr;
+
+	MALLOC_LOCK();
+	if (!size)
+		return NULL;
+	type = get_block_type(size);
+	if (type == BLOCK_LARGE || !(addr = get_existing_block(type)))
+	{
+		addr = create_new_block(type, size);
+		if (!addr)
+			return NULL;
+	}
+	return addr;
+}
+
+void free(void *ptr)
+{
+	page_t *prv;
+
+	if (!ptr)
+		return;
+	MALLOC_LOCK();
+	prv = NULL;
+	for (page_t *lst = g_pages; lst; prv = lst, lst = lst->next)
+	{
+		if (lst->type == BLOCK_LARGE)
+		{
+			if (ptr != lst->addr)
+				continue;
+			if (prv)
+				prv->next = lst->next;
+			else
+				g_pages = lst->next;
+			vfree(lst, lst->size);
+			MALLOC_UNLOCK();
+			return;
+		}
+		if ((uint8_t*)ptr < lst->addr
+		 || (uint8_t*)ptr > lst->addr + g_page_sizes[lst->type])
+			continue;
+		size_t item = ((uint8_t*)ptr - lst->addr) / g_block_sizes[lst->type];
+		if (lst->addr + g_block_sizes[lst->type] * item != (uint8_t*)ptr)
+			continue;
+		uint32_t mask = (1 << (item % 32));
+		uint32_t *block = &lst->blocks[item / 32];
+		if (!(*block & mask))
+			panic("double free %p\n", ptr);
+		*block &= ~mask;
+		check_free_pages(lst->type);
+		return;
+	}
+	panic("free unknown addr: %p\n", ptr);
+	MALLOC_UNLOCK();
+}
+
+void *realloc(void *ptr, size_t size)
+{
+	if (!ptr)
+		return malloc(size);
+	if (!size)
+	{
+		free(ptr);
+		return NULL;
+	}
+	MALLOC_LOCK();
+	for (page_t *lst = g_pages; lst; lst = lst->next)
+	{
+		if (lst->type == BLOCK_LARGE)
+		{
+			if ((uint8_t*)ptr == lst->addr)
+				return realloc_large(lst, ptr, size);
+			continue;
+		}
+		if ((uint8_t*)ptr >= lst->addr
+		 && (uint8_t*)ptr <= lst->addr + g_page_sizes[lst->type])
+		{
+			uint32_t item = ((uint8_t*)ptr - lst->addr) / g_block_sizes[lst->type];
+			if (lst->addr + g_block_sizes[lst->type] * item == ptr)
+				return realloc_small_tiny(lst, ptr, size);
+			return NULL;
+		}
+	}
+	MALLOC_UNLOCK();
+	return NULL;
+}
+
+void *zalloc(size_t size)
+{
+	char *addr = malloc(size);
+	if (addr)
+		memset(addr, 0, size);
+	return addr;
+}
+
+static void print_block(size_t start, size_t end, size_t len)
+{
+	printf("0x%08lx - 0x%08lx : 0x%lx bytes\n", start, end, len);
+}
+
+static void c_e(void **start, void *end, size_t *total)
 {
 	*total += end - *start;
 	print_block((size_t)*start, (size_t)end, (size_t)(end - *start));
 	*start = NULL;
 }
 
-static void			print_page(t_page *page, size_t *total)
+static void print_page(page_t *page, size_t *total)
 {
-	void	*start;
-	void	*end;
-	int		i;
+	void *start;
+	int i;
 
-	if (page->type == LARGE)
+	if (page->type == BLOCK_LARGE)
 	{
-		*total += page->len - sizeof(t_page_list);
-		print_block((size_t)page->addr, (size_t)(page->addr + page->len)
-				, page->len);
-		return ;
+		*total += page->size - sizeof(page_t);
+		print_block((size_t)page->addr, (size_t)(page->addr + page->size), page->size);
+		return;
 	}
 	start = NULL;
-	end = NULL;
-	i = -1;
-	while (++i < PAGE_SIZE)
+	for (i = 0; i < PAGE_SIZE; ++i)
 	{
-		if (page->blocks[i] == 1 && !start)
-			start = page->addr + i * get_block_size(page->type);
-		else if (page->blocks[i] == 0 && start)
-			c_e(&start, page->addr + i * get_block_size(page->type), total);
+		uint32_t set = page->blocks[i / 32] & (1 << (i % 32));
+		if (set && !start)
+			start = page->addr + i * g_block_sizes[page->type];
+		else if (!set && start)
+			c_e(&start, page->addr + i * g_block_sizes[page->type], total);
 	}
 	if (start)
-		c_e(&start, page->addr + i * get_block_size(page->type), total);
+		c_e(&start, page->addr + i * g_block_sizes[page->type], total);
 }
 
-static t_page_list	*try_push(size_t min)
+static page_t *try_push(size_t min)
 {
-	t_page_list		*lowest;
-	t_page_list		*lst;
-	size_t			lowest_val;
+	page_t *lowest;
+	size_t lowest_val;
 
 	lowest = NULL;
-	lst = g_pages;
 	lowest_val = -1;
-	while (lst)
+	for (page_t *lst = g_pages; lst; lst = lst->next)
 	{
 		if ((lowest_val == 0 || (size_t)lst < lowest_val) && (size_t)lst > min)
 		{
 			lowest = lst;
 			lowest_val = (size_t)lowest;
 		}
-		lst = lst->next;
 	}
-	return (lowest);
+	return lowest;
 }
 
 void show_alloc_mem(void)
 {
-	page_list_t *tmp;
+	page_t *tmp;
 	size_t total;
 
 	MALLOC_LOCK();
@@ -639,20 +398,10 @@ void show_alloc_mem(void)
 	while (1)
 	{
 		if (!(tmp = try_push((size_t)tmp)))
-			break ;
-		if (tmp->page.type == TINY)
-			ft_putstr("TINY");
-		else
-			ft_putstr(tmp->page.type == SMALL ? "SMALL" : "LARGE");
-		ft_putstr(" : 0x");
-		putaddr((size_t)tmp->page.addr);
-		ft_putchar('\n');
-		print_page(&tmp->page, &total);
+			break;
+		printf("%s : 0x%lx\n", g_block_str[tmp->type], (size_t)tmp->addr);
+		print_page(tmp, &total);
 	}
-	ft_putstr("Total: ");
-	ft_putul(total);
-	ft_putchar('\n');
+	printf("total: %lu\n", total);
 	MALLOC_UNLOCK();
 }
-
-#endif

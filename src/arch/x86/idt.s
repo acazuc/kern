@@ -1,15 +1,16 @@
 %macro isr_err 1
 isr_%+%1:
 	cli
-	pop eax
 	pushad
 	cld
+	mov eax, [esp + 8]
 	push eax
 	push %1
 	call handle_exception
 	pop eax
 	pop eax
 	popad
+	add esp, 4
 	sti
 	iret
 %endmacro

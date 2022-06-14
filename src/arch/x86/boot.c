@@ -164,7 +164,7 @@ static void print_multiboot(struct multiboot_info *mb_info)
 		for (size_t i = 0; i < mb_info->mmap_length; i += sizeof(multiboot_memory_map_t))
 		{
 			multiboot_memory_map_t *mmap = (multiboot_memory_map_t*)(mb_info->mmap_addr + i);
-			printf("mmap %8p: %016llx @ %016llx (%08x)\n", mmap, mmap->len, mmap->addr, mmap->type);
+			printf("mmap %p: %016llx @ %016llx (%08x)\n", mmap, mmap->len, mmap->addr, mmap->type);
 			if (mmap->type == MULTIBOOT_MEMORY_AVAILABLE)
 				total_mem += mmap->len;
 		}
@@ -242,7 +242,7 @@ static void print_cpuid(void)
 			printf("%s", cpuid_feature_ecx_str[i]);
 		}
 		printf("\n");
-		//XXX/ more decoding
+		/* XXX: more decoding */
 	}
 }
 
@@ -277,18 +277,46 @@ void boot(struct multiboot_info *mb_info)
 	ps2_init();
 	uint32_t mem_size = mb_get_memory_map_size(mb_info);
 	if (!mem_size)
-	{
-		printf("can't get memory map\n");
-		panic();
-	}
+		panic("can't get memory map\n");
 	if (mem_size < 0x1000000)
-	{
-		printf("can't get 16MB of memory\n");
-		panic();
-	}
-	paging_init((void*)0x1000000, mem_size - 0x10000000);
+		panic("can't get 16MB of memory\n");
+	paging_init(0x1000000, mem_size - 0x1000000);
 	__asm__ volatile ("sti");
-	printf("provoking allocation\n");
-	*(uint32_t*)0xB0000000 = 1;
-	printf("isok\n");
+}
+
+void x86_panic(uint32_t *esp, const char *file, const char *line, const char *fn, const char *fmt, ...)
+{
+	va_list va_arg;
+
+	va_start(va_arg, fmt);
+	vprintf(fmt, va_arg);
+	printf("%s@%s:%s\n", fn, file, line);
+	printf("EAX: %08lx EBX: %08lx ECX: %08lx EDX: %08lx\n", esp[9], esp[6], esp[8], esp[7]);
+	printf("ESI: %08lx EDI: %08lx ESP: %08lx EBP: %08lx\n", esp[3], esp[2], esp[5], esp[4]);
+	printf("EIP: %08lx\n", esp[0]);
+
+#if 0
+	void *ptr[64];
+	bool end = false;
+
+#define N1(n) if (!end) { ptr[n] = __builtin_return_address(n); if (!ptr[n]) { end = true; } }
+#define N2(n) N1(n + 0) N1(n + 1)
+#define N4(n) N2(n + 0) N2(n + 2)
+#define N8(n) N4(n + 0) N4(n + 4)
+#define N16(n) N8(n + 0) N8(n + 8)
+#define N32(n) N16(n + 0) N16(n + 16)
+#define N64(n) N32(n + 0) N32(n + 32)
+
+	N64(0)
+
+	for (size_t i = 0; i < 32; ++i)
+	{
+		if (ptr[i])
+			printf("[%u] %p\n", i, ptr[i]);
+	}
+#endif
+
+infl:
+	__asm__ volatile ("cli;hlt");
+	goto infl;
 }

@@ -36,6 +36,11 @@ static void init_port(uint16_t port)
 	outb(port + 0x1, 0x0F); /* enable interrupts */
 }
 
+void com_putchar(char c)
+{
+	outb(COM1, c);
+}
+
 void com_init()
 {
 	init_port(COM1);

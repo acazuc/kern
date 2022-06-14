@@ -77,11 +77,13 @@ void vga_set_cursor(uint8_t x, uint8_t y)
 void vga_enable_cursor()
 {
 	outb(CRTC_ADDR, CRTC_ADDR_CURSOR_BEG);
-	outb(CRTC_DATA, (inb(CRTC_DATA) & 0xC0) | 0x20 | 10);
+	outb(CRTC_DATA, (inb(CRTC_DATA) & 0xC0) | 13);
 	outb(CRTC_ADDR, CRTC_ADDR_CURSOR_END);
 	outb(CRTC_DATA, (inb(CRTC_DATA) & 0xE0) | 15);
 }
 
 void vga_disable_cursor()
 {
+	outb(CRTC_ADDR, CRTC_ADDR_CURSOR_BEG);
+	outb(CRTC_DATA, 0x20);
 }
