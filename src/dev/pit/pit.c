@@ -26,8 +26,8 @@
 
 #define PIC_FREQ 1193182
 
-#define PIC_DIV  0xFFFF
-#define PIC_INC  54924563 /* 1000000000 * PIC_FREQ / PIC_DIV */
+#define PIC_DIV  0x1000
+#define PIC_INC  (1000000000ULL * PIC_DIV / PIC_FREQ)
 
 static uint32_t g_sec;
 static uint32_t g_nsec;
@@ -35,8 +35,8 @@ static uint32_t g_nsec;
 void pit_init()
 {
 	outb(CMD, CMD_CHAN_0 | CMD_ACCESS_MBYTE | CMD_OP_MODE3);
-	outb(DATA0, (PIC_DIV >> 8) & 0xFF);
 	outb(DATA0, PIC_DIV & 0xFF);
+	outb(DATA0, (PIC_DIV >> 8) & 0xFF);
 }
 
 void pit_interrupt()

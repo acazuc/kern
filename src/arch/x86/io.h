@@ -10,6 +10,13 @@ static inline uint8_t inb(uint16_t port)
 	return ret;
 }
 
+static inline uint32_t inl(uint16_t port)
+{
+	uint32_t ret;
+	__asm__ volatile ("inl %1, %0" : "=a"(ret) : "Nd"(port));
+	return ret;
+}
+
 static inline void outb(uint16_t port, uint8_t val)
 {
 	__asm__ volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
@@ -18,6 +25,12 @@ static inline void outb(uint16_t port, uint8_t val)
 static inline void io_wait(void)
 {
     outb(0x80, 0);
+}
+
+static inline void insl(uint16_t port, uint32_t *buffer, uint32_t n)
+{
+	for (uint32_t i = 0; i < n; ++i)
+		buffer[i] = inl(port);
 }
 
 #endif

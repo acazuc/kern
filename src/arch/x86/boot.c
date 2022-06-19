@@ -4,6 +4,7 @@
 #include "dev/vga/vga.h"
 #include "dev/com/com.h"
 #include "dev/ps2/ps2.h"
+#include "dev/ide/ide.h"
 #include "sys/std.h"
 #include "io.h"
 #include "multiboot.h"
@@ -275,6 +276,7 @@ void boot(struct multiboot_info *mb_info)
 	pit_init();
 	com_init();
 	ps2_init();
+	ide_init();
 	uint32_t mem_size = mb_get_memory_map_size(mb_info);
 	if (!mem_size)
 		panic("can't get memory map\n");
@@ -282,6 +284,14 @@ void boot(struct multiboot_info *mb_info)
 		panic("can't get 16MB of memory\n");
 	paging_init(0x1000000, mem_size - 0x1000000);
 	__asm__ volatile ("sti");
+
+
+
+	uint8_t buf[512];
+	ide_read_sectors(0, 1, 0, (uint8_t*)buf);
+	for (size_t i = 0; i < 512; ++i)
+		printf("%02x, ", buf[i]);
+	printf("\n");
 }
 
 void x86_panic(uint32_t *esp, const char *file, const char *line, const char *fn, const char *fmt, ...)

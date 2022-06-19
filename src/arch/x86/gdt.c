@@ -20,6 +20,8 @@ static const gdt_entry_t g_gdt_entries[] =
 	{.base = 0, .limit = 0         , .type = 0},    /* NULL */
 	{.base = 0, .limit = 0xFFFFFFFF, .type = 0x9A}, /* code */
 	{.base = 0, .limit = 0xFFFFFFFF, .type = 0x92}, /* data */
+	{.base = 0, .limit = 0xFFFFFFFF, .type = 0xFA}, /* user code */
+	{.base = 0, .limit = 0xFFFFFFFF, .type = 0xF2}, /* user data */
 };
 
 static uint8_t gdt_data[8 * sizeof(g_gdt_entries) / sizeof(*g_gdt_entries)];

@@ -39,7 +39,7 @@
 #define PAGE_SIZE 0x1000
 #define PAGE_MASK 0x0FFF
 
-#define INVALIDATE_PAGE(page) __asm__ volatile ("invlpg (%0)" : : "a"(page));
+#define INVALIDATE_PAGE(page) __asm__ volatile ("invlpg (%0)" : : "a"(page) : "memory");
 
 static uint32_t g_kern_page_dirs[0x400] __attribute__((aligned(4096)));
 static uint32_t g_kern_mirror[0x1000] __attribute__((aligned(4096))); /* 16MB mirror: 0x000000 - 0x1000000 */
@@ -168,7 +168,7 @@ void paging_alloc(uint32_t addr)
 	INVALIDATE_PAGE(addr);
 }
 
-static void vmalloc_page(uint32_t addr)
+static void page_vmalloc(uint32_t addr)
 {
 	if (addr & 0xFFF)
 		panic("alloc unaligned page %lx\n", addr);
@@ -191,7 +191,7 @@ static void vmalloc_page(uint32_t addr)
 	INVALIDATE_PAGE(addr);
 }
 
-static void vfree_page(uint32_t addr)
+static void page_vfree(uint32_t addr)
 {
 	uint32_t dir_id = DIR_ID(addr);
 	uint32_t dir = DIR_VADDR[dir_id];
@@ -206,31 +206,17 @@ static void vfree_page(uint32_t addr)
 	INVALIDATE_PAGE(addr);
 }
 
-void paging_vmalloc(uint32_t addr, uint32_t size)
-{
-	if (addr & PAGE_MASK)
-		panic("vmalloc unaligned data %lx\n", addr);
-	if (size & PAGE_MASK)
-		panic("vmalloc unaligned size %lx\n", size);
-	for (uint32_t i = 0; i < size; i += PAGE_SIZE)
-		vmalloc_page(addr + i);
-}
-
-void paging_vfree(uint32_t addr, uint32_t size)
-{
-	if (addr & PAGE_MASK)
-		panic("vmalloc unaligned data %lx\n", addr);
-	if (size & PAGE_MASK)
-		panic("vmalloc unaligned size %lx\n", size);
-}
-
 void *vmalloc(size_t size)
 {
 	static uint32_t current_offset = 0x1800000UL; /* XXX: track available vaddr */
+	uint32_t addr = current_offset;
+	if (addr & PAGE_MASK)
+		panic("vmalloc unaligned data %lx\n", addr);
 	if (size & PAGE_MASK)
-		panic("malloc of unaligned size: %lx\n", size);
+		panic("vmalloc unaligned size %lx\n", size);
 	uint32_t ret = current_offset;
-	paging_vmalloc(ret, size);
+	for (uint32_t i = 0; i < size; i += PAGE_SIZE)
+		page_vmalloc(current_offset + i);
 	current_offset += size;
 	return (void*)ret;
 }
@@ -239,11 +225,11 @@ void vfree(void *ptr, size_t size)
 {
 	uint32_t addr = (uint32_t)ptr;
 	if (addr & PAGE_MASK)
-		panic("free of unaligned ptr: %p\n", ptr);
+		panic("free of unaligned addr: %lx\n", addr);
 	if (size & PAGE_MASK)
 		panic("free of unaligned size: %lx\n", size);
 	for (uint32_t i = 0; i < size; i += PAGE_SIZE)
-		vfree_page(addr + i);
+		page_vfree(addr + i);
 }
 
 void paging_dumpinfo()
