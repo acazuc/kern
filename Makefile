@@ -27,7 +27,7 @@ SRC_NAME = kernel.c \
            arch/x86/idt.c \
            arch/x86/idt.s \
            arch/x86/isr.c \
-           arch/x86/paging.c \
+           arch/x86/mem.c \
            dev/pic/pic.c \
            dev/vga/vga.c \
            dev/pit/pit.c \

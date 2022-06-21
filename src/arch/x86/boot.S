@@ -32,9 +32,9 @@ _start:
 	jb 2b
 
 	#setup dir page
-	movl $(tbl_page + 3), dir_page
-	movl $(tbl_page + 3), dir_page + 768 * 4
-	movl $(dir_page + 3), dir_page + 1023 * 4
+	movl $(tbl_page + 3), dir_page + 0x000 # identity
+	movl $(tbl_page + 3), dir_page + 0xC00 # high mem
+	movl $(dir_page + 3), dir_page + 0xFFC # recursive
 
 	#setup paging
 	mov $dir_page, %eax
@@ -44,8 +44,7 @@ _start:
 	mov %eax, %cr0
 
 	#let's go
-	mov $_kernel_main, %eax
-	jmp *%eax
+	jmp _kernel_main
  
 .section .bss
 .align 16
@@ -56,10 +55,8 @@ stack_top:
 .section .text
 .global _kernel_main
 _kernel_main:
-	#remove trampoline page
-	#movl $0, 0xFFFFF000
 	mov $stack_top, %esp
-	add $0xC0000000, %ebx
+	add $0xC0000000, %ebx # virtual address for multiboot
 	push %ebx
 	call kernel_main
 

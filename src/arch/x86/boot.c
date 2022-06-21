@@ -283,15 +283,17 @@ void boot(struct multiboot_info *mb_info)
 	if (mem_size < 0x1000000)
 		panic("can't get 16MB of memory\n");
 	paging_init(0x1000000, mem_size - 0x1000000);
+	*(uint32_t*)(0xFFFFF000) = 0; /* remove identity paging at 0x00000000 */
 	__asm__ volatile ("sti");
 
 
-
-	/*uint8_t buf[512];
+#if 0
+	uint8_t buf[512];
 	ide_read_sectors(0, 1, 0, (uint8_t*)buf);
 	for (size_t i = 0; i < 512; ++i)
 		printf("%02x, ", buf[i]);
-	printf("\n");*/
+	printf("\n");
+#endif
 }
 
 void x86_panic(uint32_t *esp, const char *file, const char *line, const char *fn, const char *fmt, ...)
