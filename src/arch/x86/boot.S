@@ -6,11 +6,46 @@
 .set MULTIBOOT_MAGIC,    0x1BADB002
 .set MULTIBOOT_CHECKSUM, -(MULTIBOOT_MAGIC + MULTIBOOT_FLAGS)
  
-.section .multiboot
+.section .multiboot.data, "aw"
 .align 4
 .long MULTIBOOT_MAGIC
 .long MULTIBOOT_FLAGS
 .long MULTIBOOT_CHECKSUM
+
+.section .multiboot.bss, "aw"
+dir_page:
+.skip 4096
+tbl_page:
+.skip 4096
+
+.section .multiboot.text, "ax"
+.global _start
+.type _start, @function
+_start:
+	#setup tbl page
+	mov $1, %eax
+	mov $tbl_page, %edi
+2:	mov %eax, (%edi)
+	add $4096, %eax
+	add $4, %edi
+	cmp $(tbl_page + 4096), %edi
+	jb 2b
+
+	#setup dir page
+	movl $(tbl_page + 3), dir_page
+	movl $(tbl_page + 3), dir_page + 768 * 4
+	movl $(dir_page + 3), dir_page + 1023 * 4
+
+	#setup paging
+	mov $dir_page, %eax
+	mov %eax, %cr3
+	mov %cr0, %eax
+	or $0x80000000, %eax
+	mov %eax, %cr0
+
+	#let's go
+	mov $_kernel_main, %eax
+	jmp *%eax
  
 .section .bss
 .align 16
@@ -19,10 +54,12 @@ stack_bottom:
 stack_top:
  
 .section .text
-.global _start
-.type _start, @function
-_start:
+.global _kernel_main
+_kernel_main:
+	#remove trampoline page
+	#movl $0, 0xFFFFF000
 	mov $stack_top, %esp
+	add $0xC0000000, %ebx
 	push %ebx
 	call kernel_main
 

@@ -155,9 +155,9 @@ static void print_multiboot(struct multiboot_info *mb_info)
 	printf("mb_info: %p\n", mb_info);
 	printf("multiboot flags: %08x\n", mb_info->flags);
 	if (mb_info->flags & MULTIBOOT_INFO_CMDLINE)
-		printf("cmdline: %s\n", (char*)mb_info->cmdline);
+		printf("cmdline: %p\n", (char*)mb_info->cmdline);
 	if (mb_info->flags & MULTIBOOT_INFO_BOOT_LOADER_NAME)
-		printf("bootloader: %s\n", (char*)mb_info->boot_loader_name);
+		printf("bootloader: %p\n", (char*)mb_info->boot_loader_name);
 	printf("BIOS mem: %08x - %08x\n", mb_info->mem_lower, mb_info->mem_upper);
 	uint64_t total_mem = 0;
 	if (mb_info->flags & MULTIBOOT_INFO_MEM_MAP)
@@ -287,11 +287,11 @@ void boot(struct multiboot_info *mb_info)
 
 
 
-	uint8_t buf[512];
+	/*uint8_t buf[512];
 	ide_read_sectors(0, 1, 0, (uint8_t*)buf);
 	for (size_t i = 0; i < 512; ++i)
 		printf("%02x, ", buf[i]);
-	printf("\n");
+	printf("\n");*/
 }
 
 void x86_panic(uint32_t *esp, const char *file, const char *line, const char *fn, const char *fmt, ...)

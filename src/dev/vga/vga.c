@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <sys/std.h>
 
-#define VGA_PTR ((uint16_t*)0xB8000)
+#define VGA_PTR ((uint16_t*)0xC00B8000)
 
 #define CRTC_ADDR 0x3D4
 #define CRTC_DATA 0x3D5

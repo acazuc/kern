@@ -41,14 +41,13 @@
 
 #define INVALIDATE_PAGE(page) __asm__ volatile ("invlpg (%0)" : : "a"(page) : "memory");
 
-static uint32_t g_kern_page_dirs[0x400] __attribute__((aligned(4096)));
-static uint32_t g_kern_mirror[0x1000] __attribute__((aligned(4096))); /* 16MB mirror: 0x000000 - 0x1000000 */
-
 static uint32_t *g_bitmap;
 static uint32_t g_bitmap_size; /* of uint32_t */
 
 static uint32_t g_addr; /* base memory addresss */
 static uint32_t g_size; /* memory size */
+
+extern uint8_t _kernel_end;
 
 static uint32_t alloc_page(void);
 
@@ -57,53 +56,30 @@ static inline uint32_t mkentry(uint32_t addr, uint32_t flags)
 	return addr | flags;
 }
 
-static void init_mirror_pages(void)
-{
-	memset(g_kern_page_dirs, 0, sizeof(g_kern_page_dirs));
-	g_kern_page_dirs[0] = mkentry((uint32_t)&g_kern_mirror[0x000], DIR_FLAG_P | DIR_FLAG_RW);
-	g_kern_page_dirs[1] = mkentry((uint32_t)&g_kern_mirror[0x400], DIR_FLAG_P | DIR_FLAG_RW);
-	g_kern_page_dirs[2] = mkentry((uint32_t)&g_kern_mirror[0x800], DIR_FLAG_P | DIR_FLAG_RW);
-	g_kern_page_dirs[3] = mkentry((uint32_t)&g_kern_mirror[0xC00], DIR_FLAG_P | DIR_FLAG_RW);
-	memset(g_kern_mirror, 0, sizeof(g_kern_mirror));
-	for (size_t i = 0; i < PAGE_SIZE; ++i)
-		g_kern_mirror[i] = (i * PAGE_SIZE) | 3;
-}
-
-static void init_recursive_pages(void)
-{
-	g_kern_page_dirs[DIR_ID(DIR_VADDR)] = mkentry((uint32_t)&g_kern_page_dirs[0], DIR_FLAG_P | DIR_FLAG_RW);
-}
-
 static void init_physical_maps(void)
 {
 	uint32_t pages_count = g_size / PAGE_SIZE;
 	g_bitmap_size = (pages_count + 31) / 32;
 	if (g_bitmap_size * 4 >= 0x1000 * 0x400) /* arbitrary: must not be greater than a single dir */
 		panic("bitmap size too long: %lu / %u", g_bitmap_size * 4, 0x1000 * 0x400);
-	g_bitmap = (uint32_t*)g_addr;
-	memset(g_bitmap, 0, g_bitmap_size * sizeof(uint32_t));
-	uint32_t bitmap_bytes = g_bitmap_size * 4;
+
+	uint32_t bitmap_bytes = g_bitmap_size * sizeof(uint32_t);
 	uint32_t bitmap_pages = (bitmap_bytes + PAGE_SIZE - 1) / PAGE_SIZE;
+	uint32_t addr = (uint32_t)&_kernel_end + 0x1000 + 0x1000 * bitmap_pages;
+	addr += PAGE_SIZE * 1024 - 1;
+	addr -= addr % (PAGE_SIZE * 1024);
+	g_bitmap = (uint32_t*)addr;
+
+	uint32_t dir_id = DIR_ID(g_bitmap);
+	uint32_t *dir_ptr = &DIR_VADDR[dir_id];
+	*dir_ptr = mkentry(g_addr, DIR_FLAG_P | DIR_FLAG_RW);
+	uint32_t *tbl_ptr = TBL_VADDR(dir_id);
+	uint32_t tbl_id = TBL_ID(g_bitmap);
+	for (uint32_t i = 0; i < bitmap_pages; ++i)
+		tbl_ptr[tbl_id + i] = mkentry(g_addr + 0x1000 + i * 0x1000, TBL_FLAG_P | TBL_FLAG_RW);
+
+	memset(g_bitmap, 0, bitmap_bytes);
 	memset(g_bitmap, 0xFF, (bitmap_pages + 7) / 8);
-
-	/* init bitmap tables page */
-	uint32_t *tbl_page = (uint32_t*)alloc_page();
-	uint32_t i;
-	for (i = 0; i < (g_bitmap_size + 0x3FF) / 0x400; ++i)
-		tbl_page[i] = mkentry((uint32_t)&g_bitmap[i * 0x400], TBL_FLAG_P | TBL_FLAG_RW);
-	memset(&tbl_page[i], 0, PAGE_SIZE - 4 * i);
-	g_kern_page_dirs[DIR_ID(g_bitmap)] = mkentry((uint32_t)&tbl_page[0], DIR_FLAG_P | DIR_FLAG_RW);
-}
-
-static void enable_paging(uint32_t *dirs)
-{
-	__asm__ volatile ("mov %0, %%cr3" : : "Nd"(dirs));
-	__asm__ volatile ("mov %cr0, %eax; or $0x80000000, %eax; mov %eax, %cr0");
-}
-
-static void disable_paging(void)
-{
-	__asm__ volatile ("mov %cr0, %eax; and $0x7FFFFFFF, %eax; mov %eax, %cr0");
 }
 
 void paging_init(uint32_t addr, uint32_t size)
@@ -111,10 +87,7 @@ void paging_init(uint32_t addr, uint32_t size)
 	g_addr = addr;
 	g_size = size;
 	printf("initializing memory %lx-%lx (%lu)\n", addr, addr + size, size);
-	init_mirror_pages();
 	init_physical_maps();
-	init_recursive_pages();
-	enable_paging(g_kern_page_dirs);
 }
 
 static uint32_t alloc_page(void)
@@ -150,6 +123,9 @@ static void free_page(uint32_t addr)
 	*bitmap &= ~mask;
 }
 
+static int table_pages = 0;
+static int real_pages = 0;
+
 void paging_alloc(uint32_t addr)
 {
 	addr &= ~0xFFF;
@@ -165,6 +141,7 @@ void paging_alloc(uint32_t addr)
 	if (!(tbl & TBL_FLAG_V))
 		panic("writing to non-allocated vmem tbl %lx\n", addr);
 	tbl_ptr[tbl_id] = mkentry(alloc_page(), TBL_FLAG_RW | TBL_FLAG_P);
+	real_pages++;
 	INVALIDATE_PAGE(addr);
 }
 
@@ -177,6 +154,7 @@ static void page_vmalloc(uint32_t addr)
 	if (!(dir & DIR_FLAG_P))
 	{
 		dir = mkentry(alloc_page(), DIR_FLAG_RW | DIR_FLAG_P);
+		table_pages++;
 		DIR_VADDR[dir_id] = dir;
 		memset(TBL_VADDR(dir_id), 0, PAGE_SIZE);
 	}
@@ -208,7 +186,8 @@ static void page_vfree(uint32_t addr)
 
 void *vmalloc(size_t size)
 {
-	static uint32_t current_offset = 0x1800000UL; /* XXX: track available vaddr */
+	printf("vmalloc %lx bytes\n", size);
+	static uint32_t current_offset = 0x18000000; /* XXX: track available vaddr */
 	uint32_t addr = current_offset;
 	if (addr & PAGE_MASK)
 		panic("vmalloc unaligned data %lx\n", addr);
@@ -244,5 +223,6 @@ void paging_dumpinfo()
 				pages_used++;
 		}
 	}
-	printf("pages used: %lu\n", pages_used);
+	printf("pages used: %lu / %lu\n", pages_used, g_bitmap_size * sizeof(uint32_t));
+	printf("table_pages: %lu; real_pages: %lu\n", table_pages, real_pages);
 }

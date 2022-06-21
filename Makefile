@@ -16,6 +16,8 @@ ISO_NAME = os.iso
 
 DISK_FILE = disk.qcow2
 
+LDFILE = src/arch/x86/linker.ld
+
 SRC_NAME = kernel.c \
            shell.c \
            arch/x86/boot.S \
@@ -62,9 +64,11 @@ $(OBJ_PATH)/%.S.o: $(SRC_PATH)/%.S
 	@echo "ASM $<"
 	@$(BOOT_ASM) $< -o $@
 
-$(BIN_NAME): $(OBJ)
+$(LDFILE):
+
+$(BIN_NAME): $(OBJ) $(LDFILE)
 	@echo "LD $<"
-	@$(LD) -T linker.ld -o $@ $(LDFLAGS) $^ -lgcc
+	@$(LD) -T $(LDFILE) -o $@ $(LDFLAGS) $(OBJ) -lgcc
 
 $(ISO_NAME): $(BIN_NAME)
 	@mkdir -p isodir
