@@ -3,6 +3,21 @@
 #include "sys/std.h"
 #include "shell.h"
 
+static void infl(void)
+{
+loop:
+	__asm__ volatile ("hlt");
+	goto loop;
+}
+
+static void userland(void)
+{
+	printf("userland\n");
+	uint32_t ret = syscall(0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6);
+	printf("syscall returned 0x%lx\n", ret);
+	while (1);
+}
+
 void kernel_main(struct multiboot_info *mb_info)
 {
 	shell_init();
@@ -26,8 +41,7 @@ void kernel_main(struct multiboot_info *mb_info)
 		free(s[i]);
 	free(s);
 	printf("boot end\n");
-
-infl:
-	__asm__ volatile ("hlt");
-	goto infl;
+	usermode(&userland);
+	printf("past usermode\n");
+	infl();
 }

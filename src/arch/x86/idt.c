@@ -32,7 +32,7 @@ static void set_descriptor(struct idt_entry *descriptor, void *isr, uint8_t flag
 void idt_init()
 {
 	for (int i = 0; i < 256; ++i)
-		set_descriptor(&g_idt[i], g_isr_table[i], 0x8E);
+		set_descriptor(&g_idt[i], g_isr_table[i], i == 0x80 ? 0xEE : 0x8E);
 	g_idtr.base = (uintptr_t)&g_idt[0];
 	g_idtr.limit = (uint16_t)sizeof(struct idt_entry) * sizeof(g_idt) / sizeof(*g_idt) - 1;
 	__asm__ volatile ("lidt %0" : : "m"(g_idtr));

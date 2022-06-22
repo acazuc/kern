@@ -7,11 +7,9 @@ isr_%+%1:
 	push eax
 	push %1
 	call handle_exception
-	pop eax
-	pop eax
+	add esp, 8
 	popad
 	add esp, 4
-	sti
 	iret
 %endmacro
 
@@ -23,14 +21,33 @@ isr_%+%1:
 	push 0
 	push %1
 	call handle_exception
-	pop eax
-	pop eax
+	add esp, 8
 	popad
-	sti
 	iret
 %endmacro
 
+isr_128:
+	cli
+	pushad
+	cld
+	push ebp
+	push edi
+	push esi
+	push edx
+	push ecx
+	push ebx
+	push eax
+	push esp
+	push 128
+	call reload_segments
+	;call handle_exception
+	add esp, 36
+	popad
+	mov eax, 10
+	iret
+
 extern handle_exception
+extern reload_segments
 
 isr_no_err 0
 isr_no_err 1
@@ -66,29 +83,38 @@ isr_err    30
 isr_no_err 31
 
 ; IRQ master
-isr_no_err  32
-isr_no_err  33
-isr_no_err  34
-isr_no_err  35
-isr_no_err  36
-isr_no_err  37
-isr_no_err  38
-isr_no_err  39
+isr_no_err 32
+isr_no_err 33
+isr_no_err 34
+isr_no_err 35
+isr_no_err 36
+isr_no_err 37
+isr_no_err 38
+isr_no_err 39
 
 ; IRQ slave
-isr_no_err  40
-isr_no_err  41
-isr_no_err  42
-isr_no_err  43
-isr_no_err  44
-isr_no_err  45
-isr_no_err  46
-isr_no_err  47
+isr_no_err 40
+isr_no_err 41
+isr_no_err 42
+isr_no_err 43
+isr_no_err 44
+isr_no_err 45
+isr_no_err 46
+isr_no_err 47
+
+; others
+%assign i 48
+%rep 208
+%if i != 0x80
+	isr_no_err i
+%endif
+%assign i i+1
+%endrep
 
 global g_isr_table
 g_isr_table:
 %assign i 0
-%rep    48
+%rep 256
 	dd isr_%+i ; use DQ instead if targeting 64-bit
 %assign i i+1
 %endrep

@@ -153,9 +153,9 @@ void shell_putchar(char c)
 		print_time();
 	}
 
-	com_putchar(c);
-	if (c == '\n')
-		com_putchar('\r');
+	//com_putchar(c);
+	//if (c == '\n')
+	//	com_putchar('\r');
 
 	if (c == '\n')
 	{

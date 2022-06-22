@@ -51,6 +51,43 @@ static void handle_invalid_opcode(uint32_t err)
 	panic("invalid opcode\n");
 }
 
+static void handle_device_not_available(uint32_t err)
+{
+	(void)err;
+	panic("device not available\n");
+}
+
+static void handle_double_fault(uint32_t err)
+{
+	panic("double fault: 0x%lx\n", err);
+}
+
+static void handle_coprocessor_segment_overrun(uint32_t err)
+{
+	(void)err;
+	panic("coprocessor segment overrun\n");
+}
+
+static void handle_invalid_tss(uint32_t err)
+{
+	panic("invalid tss: 0x%lx\n", err);
+}
+
+static void handle_segment_not_present(uint32_t err)
+{
+	panic("segment not present: 0x%lx\n", err);
+}
+
+static void handle_stack_segment_fault(uint32_t err)
+{
+	panic("stack segment fault: 0x%lx\n", err);
+}
+
+static void handle_general_protection_fault(uint32_t err)
+{
+	panic("general protection fault: 0x%lx\n", err);
+}
+
 static void handle_page_fault(uint32_t err)
 {
 	uint32_t page_addr;
@@ -60,7 +97,7 @@ static void handle_page_fault(uint32_t err)
 		paging_alloc(page_addr);
 		return;
 	}
-	panic("page protection violation @ %08lx: %08lx\n", page_addr, err);
+	panic("page protection violation @ 0x%08lx: 0x%08lx\n", page_addr, err);
 }
 
 static void handle_x87_fpe(uint32_t err)
@@ -138,6 +175,13 @@ static void irq_handler_36(uint32_t err)
 	outb(0x20, 0x20);
 }
 
+static void handle_syscall(uint32_t err)
+{
+	uint32_t *args = (uint32_t*)err;
+	printf("syscall\n");
+	printf("id: %lx, arg1: %lx, arg2: %lx, arg3: %lx, arg4: %lx, arg5: %lx, arg6: %lx\n", args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
+}
+
 void handle_exception(uint32_t id, uint32_t err)
 {
 	if (id >= 256)
@@ -156,6 +200,13 @@ static void (*g_exception_handlers[256])(uint32_t) =
 	[0x4]  = handle_overflow,
 	[0x5]  = handle_bound_range_exceeded,
 	[0x6]  = handle_invalid_opcode,
+	[0x7]  = handle_device_not_available,
+	[0x8]  = handle_double_fault,
+	[0x9]  = handle_coprocessor_segment_overrun,
+	[0xA]  = handle_invalid_tss,
+	[0xB]  = handle_segment_not_present,
+	[0xC]  = handle_stack_segment_fault,
+	[0xD]  = handle_general_protection_fault,
 	[0xE]  = handle_page_fault,
 	[0x10] = handle_x87_fpe,
 	[0x11] = handle_alignment_check,
@@ -169,4 +220,5 @@ static void (*g_exception_handlers[256])(uint32_t) =
 	[0x20] = irq_handler_32,
 	[0x21] = irq_handler_33,
 	[0x24] = irq_handler_36,
+	[0x80] = handle_syscall,
 };

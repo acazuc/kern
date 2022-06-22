@@ -23,7 +23,7 @@ tbl_page:
 .type _start, @function
 _start:
 	#setup tbl page
-	mov $1, %eax
+	mov $7, %eax # P | RW | US; XXX: remove US
 	mov $tbl_page, %edi
 2:	mov %eax, (%edi)
 	add $4096, %eax
@@ -32,9 +32,9 @@ _start:
 	jb 2b
 
 	#setup dir page
-	movl $(tbl_page + 3), dir_page + 0x000 # identity
-	movl $(tbl_page + 3), dir_page + 0xC00 # high mem
-	movl $(dir_page + 3), dir_page + 0xFFC # recursive
+	movl $(tbl_page + 7), dir_page + 0x000 # identity; XXX: remove US
+	movl $(tbl_page + 7), dir_page + 0xC00 # high mem; XXX: remove US
+	movl $(dir_page + 7), dir_page + 0xFFC # recursive; XXX: remove US
 
 	#setup paging
 	mov $dir_page, %eax

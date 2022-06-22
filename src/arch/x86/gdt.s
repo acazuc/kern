@@ -1,5 +1,3 @@
-.text:
-
 global reload_segments
 
 reload_segments:
