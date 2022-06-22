@@ -3,7 +3,7 @@ isr_%+%1:
 	cli
 	pushad
 	cld
-	mov eax, [esp + 8]
+	mov eax, [esp + 8 * 4]
 	push eax
 	push %1
 	call handle_exception
@@ -53,7 +53,7 @@ isr_err    17
 isr_no_err 18
 isr_no_err 19
 isr_no_err 20
-isr_no_err 21
+isr_err    21
 isr_no_err 22
 isr_no_err 23
 isr_no_err 24
@@ -61,7 +61,7 @@ isr_no_err 25
 isr_no_err 26
 isr_no_err 27
 isr_no_err 28
-isr_no_err 29
+isr_err    29
 isr_err    30
 isr_no_err 31
 

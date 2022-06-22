@@ -4,8 +4,8 @@
 
 #include <stdbool.h>
 
-#define BLOCKS_SIZE ((PAGE_SIZE + 31) / 32)
-#define PAGE_SIZE 1024
+#define BLOCKS_SIZE ((BLOCKS_COUNT + 31) / 32)
+#define BLOCKS_COUNT 128 /* XXX: per-block type size */
 
 #define MALLOC_LOCK()
 #define MALLOC_UNLOCK()
@@ -14,29 +14,55 @@ typedef struct page page_t;
 
 enum block_type
 {
-	BLOCK_TINY,
-	BLOCK_SMALL,
-	BLOCK_LARGE,
+	BLOCK_1,
+	BLOCK_2,
+	BLOCK_4,
+	BLOCK_8,
+	BLOCK_16,
+	BLOCK_32,
+	BLOCK_64,
+	BLOCK_128,
+	BLOCK_256,
+	BLOCK_512,
+	BLOCK_1024,
+	BLOCK_2048,
+	BLOCK_4096,
+	BLOCK_LARGE
 };
 
 static const char *g_block_str[] =
 {
-	"TINY",
-	"SMALL",
+	"1",
+	"2",
+	"4",
+	"8",
+	"16",
+	"32",
+	"64",
+	"128",
+	"256",
+	"512",
+	"1024",
+	"2048",
+	"4096",
 	"LARGE"
 };
 
-static const uint32_t g_block_sizes[] =
+static const size_t g_block_sizes[] =
 {
+	1,
+	2,
+	4,
+	8,
+	16,
+	32,
+	64,
 	128,
+	256,
+	512,
 	1024,
-	0
-};
-
-static const uint32_t g_page_sizes[] =
-{
-	128 * PAGE_SIZE,
-	1024 * PAGE_SIZE,
+	2048,
+	4096,
 	0
 };
 
@@ -45,18 +71,19 @@ struct page
 	enum block_type type;
 	size_t size;
 	uint8_t *addr;
-	uint32_t blocks[BLOCKS_SIZE];
 	page_t *next;
+	uint32_t blocks[];
 };
 
 static page_t *g_pages;
 
 static enum block_type get_block_type(size_t size)
 {
-	if (size <= g_block_sizes[BLOCK_TINY])
-		return BLOCK_TINY;
-	if (size <= g_block_sizes[BLOCK_SMALL])
-		return BLOCK_SMALL;
+	for (size_t i = 0; i < sizeof(g_block_sizes) / sizeof(*g_block_sizes); ++i)
+	{
+		if (size <= g_block_sizes[i])
+			return i;
+	}
 	return BLOCK_LARGE;
 }
 
@@ -64,17 +91,22 @@ static page_t *alloc_page(enum block_type type, size_t size)
 {
 	page_t *page;
 	size_t alloc_size;
+	size_t blocks_size;
 
-	alloc_size = (size + sizeof(*page) + 4095) & ~(0xFFF);
+	if (type != BLOCK_LARGE)
+		blocks_size = sizeof(uint32_t) * BLOCKS_SIZE;
+	else
+		blocks_size = 0;
+	alloc_size = size + sizeof(*page) + blocks_size + PAGE_SIZE - 1;
+	alloc_size -= alloc_size % PAGE_SIZE;
 	page = vmalloc(alloc_size);
 	if (!page)
 		return NULL;
 	page->type = type;
 	page->size = alloc_size;
-	page->addr = (uint8_t*)page + sizeof(*page);
+	page->addr = (uint8_t*)page + sizeof(*page) + blocks_size;
 	page->next = NULL;
-	if (type == BLOCK_TINY || type == BLOCK_SMALL)
-		memset(page->blocks, 0, sizeof(page->blocks));
+	memset(page->blocks, 0, blocks_size);
 	return page;
 }
 
@@ -151,7 +183,7 @@ static void *create_new_block(enum block_type type, size_t size)
 {
 	page_t *page;
 
-	page = alloc_page(type, type == BLOCK_LARGE ? size : g_page_sizes[type]);
+	page = alloc_page(type, type == BLOCK_LARGE ? size : g_block_sizes[type] * BLOCKS_COUNT);
 	if (!page)
 		return NULL;
 	page->blocks[0] = 1;
@@ -211,7 +243,7 @@ static void *realloc_large(page_t *lst, void *ptr, size_t size)
 	return addr;
 }
 
-static void *realloc_small_tiny(page_t *lst, void *ptr, size_t size)
+static void *realloc_blocky(page_t *lst, void *ptr, size_t size)
 {
 	void *addr;
 	size_t len;
@@ -236,11 +268,12 @@ static void *realloc_small_tiny(page_t *lst, void *ptr, size_t size)
 	return addr;
 }
 
-void *malloc(size_t size)
+void *malloc(size_t size, uint32_t flags)
 {
 	enum block_type type;
 	void *addr;
 
+	(void)flags;
 	MALLOC_LOCK();
 	if (!size)
 		return NULL;
@@ -277,7 +310,7 @@ void free(void *ptr)
 			return;
 		}
 		if ((uint8_t*)ptr < lst->addr
-		 || (uint8_t*)ptr > lst->addr + g_page_sizes[lst->type])
+		 || (uint8_t*)ptr > lst->addr + g_block_sizes[lst->type] * BLOCKS_COUNT)
 			continue;
 		size_t item = ((uint8_t*)ptr - lst->addr) / g_block_sizes[lst->type];
 		if (lst->addr + g_block_sizes[lst->type] * item != (uint8_t*)ptr)
@@ -294,10 +327,11 @@ void free(void *ptr)
 	MALLOC_UNLOCK();
 }
 
-void *realloc(void *ptr, size_t size)
+void *realloc(void *ptr, size_t size, uint32_t flags)
 {
+	(void)flags;
 	if (!ptr)
-		return malloc(size);
+		return malloc(size, flags);
 	if (!size)
 	{
 		free(ptr);
@@ -313,11 +347,11 @@ void *realloc(void *ptr, size_t size)
 			continue;
 		}
 		if ((uint8_t*)ptr >= lst->addr
-		 && (uint8_t*)ptr <= lst->addr + g_page_sizes[lst->type])
+		 && (uint8_t*)ptr <= lst->addr + g_block_sizes[lst->type] * BLOCKS_COUNT)
 		{
 			uint32_t item = ((uint8_t*)ptr - lst->addr) / g_block_sizes[lst->type];
 			if (lst->addr + g_block_sizes[lst->type] * item == ptr)
-				return realloc_small_tiny(lst, ptr, size);
+				return realloc_blocky(lst, ptr, size);
 			return NULL;
 		}
 	}
@@ -325,17 +359,9 @@ void *realloc(void *ptr, size_t size)
 	return NULL;
 }
 
-void *zalloc(size_t size)
-{
-	char *addr = malloc(size);
-	if (addr)
-		memset(addr, 0, size);
-	return addr;
-}
-
 static void print_block(size_t start, size_t end, size_t len)
 {
-	printf("0x%08lx - 0x%08lx : 0x%lx bytes\n", start, end, len);
+	printf(" 0x%lx - 0x%lx : 0x%lx bytes\n", start, end, len);
 }
 
 static void c_e(void **start, void *end, size_t *total)
@@ -357,7 +383,7 @@ static void print_page(page_t *page, size_t *total)
 		return;
 	}
 	start = NULL;
-	for (i = 0; i < PAGE_SIZE; ++i)
+	for (i = 0; i < BLOCKS_COUNT; ++i)
 	{
 		uint32_t set = page->blocks[i / 32] & (1 << (i % 32));
 		if (set && !start)
@@ -387,7 +413,7 @@ static page_t *try_push(size_t min)
 	return lowest;
 }
 
-void show_alloc_mem(void)
+void show_alloc_mem()
 {
 	page_t *tmp;
 	size_t total;
@@ -399,9 +425,9 @@ void show_alloc_mem(void)
 	{
 		if (!(tmp = try_push((size_t)tmp)))
 			break;
-		printf("%s : 0x%lx\n", g_block_str[tmp->type], (size_t)tmp->addr);
+		printf("%s : %p (0x%lx)\n", g_block_str[tmp->type], tmp, tmp->size);
 		print_page(tmp, &total);
 	}
-	printf("total: %lu\n", total);
+	printf("total: %lu bytes\n", total);
 	MALLOC_UNLOCK();
 }

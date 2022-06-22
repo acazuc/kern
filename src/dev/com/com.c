@@ -33,7 +33,7 @@ static void init_port(uint16_t port)
 		return;
 	}
 	outb(port + 0x4, 0x0F); /* disable loopback */
-	outb(port + 0x1, 0x0F); /* enable interrupts */
+	outb(port + 0x1, 0x01); /* enable interrupts */
 }
 
 void com_putchar(char c)

@@ -63,6 +63,60 @@ static void handle_page_fault(uint32_t err)
 	panic("page protection violation @ %08lx: %08lx\n", page_addr, err);
 }
 
+static void handle_x87_fpe(uint32_t err)
+{
+	(void)err;
+	panic("x87 fpe\n");
+}
+
+static void handle_alignment_check(uint32_t err)
+{
+	(void)err;
+	panic("alignment check\n");
+}
+
+static void handle_machine_check(uint32_t err)
+{
+	(void)err;
+	panic("machine check\n");
+}
+
+static void handle_simd_fpe(uint32_t err)
+{
+	(void)err;
+	panic("simd fpe\n");
+}
+
+static void handle_virtualization_exception(uint32_t err)
+{
+	(void)err;
+	panic("virtualization exception\n");
+}
+
+static void handle_control_protection_exception(uint32_t err)
+{
+	(void)err;
+	panic("control protection exception\n");
+}
+
+static void handle_hypervisor_injection_exception(uint32_t err)
+{
+	(void)err;
+	panic("hypervisor injection exception\n");
+}
+
+static void handle_vmm_communication_exception(uint32_t err)
+{
+	(void)err;
+	panic("vmm communication exception\n");
+}
+
+static void handle_security_exception(uint32_t err)
+{
+	(void)err;
+	panic("security exception\n");
+}
+
 static void irq_handler_32(uint32_t err)
 {
 	(void)err;
@@ -77,12 +131,19 @@ static void irq_handler_33(uint32_t err)
 	outb(0x20, 0x20);
 }
 
+static void irq_handler_36(uint32_t err)
+{
+	(void)err;
+	printf("com irq\n");
+	outb(0x20, 0x20);
+}
+
 void handle_exception(uint32_t id, uint32_t err)
 {
 	if (id >= 256)
-		panic("invalid exception id: %08lx (err: %08lx)\n", id, err);
+		panic("invalid exception id: 0x%08lx (err: 0x%08lx)\n", id, err);
 	if (!g_exception_handlers[id])
-		panic("unhandled exception %02lx (err: %08lx)\n", id, err);
+		panic("unhandled exception 0x%02lx (err: 0x%08lx)\n", id, err);
 	g_exception_handlers[id](err);
 }
 
@@ -96,6 +157,16 @@ static void (*g_exception_handlers[256])(uint32_t) =
 	[0x5]  = handle_bound_range_exceeded,
 	[0x6]  = handle_invalid_opcode,
 	[0xE]  = handle_page_fault,
+	[0x10] = handle_x87_fpe,
+	[0x11] = handle_alignment_check,
+	[0x12] = handle_machine_check,
+	[0x13] = handle_simd_fpe,
+	[0x14] = handle_virtualization_exception,
+	[0x15] = handle_control_protection_exception,
+	[0x1C] = handle_hypervisor_injection_exception,
+	[0x1D] = handle_vmm_communication_exception,
+	[0x1E] = handle_security_exception,
 	[0x20] = irq_handler_32,
 	[0x21] = irq_handler_33,
+	[0x24] = irq_handler_36,
 };

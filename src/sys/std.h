@@ -59,10 +59,9 @@ int printf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 int vsnprintf(char *d, size_t n, const char *fmt, va_list va_arg);
 int snprintf(char *d, size_t n, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
 
-void *malloc(size_t size);
+void *malloc(size_t size, uint32_t flags);
 void free(void *ptr);
-void *zalloc(size_t size);
-void *realloc(void *ptr, size_t size);
+void *realloc(void *ptr, size_t size, uint32_t flags);
 void show_alloc_mem(void);
 
 #endif

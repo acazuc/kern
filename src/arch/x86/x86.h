@@ -7,6 +7,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#define PAGE_SIZE 4096
+
 void idt_init(void);
 void reload_segments(void);
 void gdt_init(void);

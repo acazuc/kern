@@ -72,6 +72,7 @@ void shell_key_evt(const kbd_key_evt_t *evt)
 			else if (!strcmp(cmd, "mem"))
 			{
 				show_alloc_mem();
+				paging_dumpinfo();
 			}
 			else if (!strcmp(cmd, "panic"))
 			{

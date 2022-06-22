@@ -6,7 +6,7 @@ BOOT_ASM = i686-elf-as
 
 LD = i686-elf-gcc
 
-CFLAGS = -ffreestanding -O0 -Wall -Wextra -fno-builtin -fno-stack-protector
+CFLAGS = -ffreestanding -O2 -Wall -Wextra -fno-builtin -fno-stack-protector -g
 
 LDFLAGS = -ffreestanding -nostdlib -nodefaultlibs
 
@@ -84,7 +84,11 @@ $(DISK_FILE):
 	@sudo qemu-nbd --disconnect /dev/nbd0
 
 run: all $(DISK_FILE)
-	@qemu-system-i386 -m 1024 -soundhw pcspk -device piix3-ide,id=ide -drive id=disk,file=$(DISK_FILE),format=qcow2,if=none -device ide-hd,drive=disk,bus=ide.0 -kernel $(BIN_NAME)
+	@qemu-system-i386 -m 1024 -soundhw pcspk \
+	-device piix3-ide,id=ide \
+	-drive id=disk,file=$(DISK_FILE),format=qcow2,if=none \
+	-device ide-hd,drive=disk,bus=ide.0 \
+	-kernel $(BIN_NAME)
 
 odir:
 	@mkdir -p $(OBJ_PATH)
