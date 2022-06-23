@@ -134,7 +134,7 @@ void paging_alloc(uint32_t addr)
 		panic("allocating already present page 0x%lx\n", addr);
 	if (!(tbl & TBL_FLAG_V))
 		panic("writing to non-allocated vmem tbl 0x%lx\n", addr);
-	tbl_ptr[tbl_id] = mkentry(pmm_alloc_page(), TBL_FLAG_RW | TBL_FLAG_P | TBL_FLAG_US); /* XXX: remove US */
+	tbl_ptr[tbl_id] = mkentry(pmm_alloc_page(), TBL_FLAG_RW | TBL_FLAG_P);
 }
 
 static void vmm_alloc_page(uint32_t addr)
@@ -145,7 +145,7 @@ static void vmm_alloc_page(uint32_t addr)
 	uint32_t dir = DIR_VADDR[dir_id];
 	if (!(dir & DIR_FLAG_P))
 	{
-		dir = mkentry(pmm_alloc_page(), DIR_FLAG_RW | DIR_FLAG_P | DIR_FLAG_US); /* XXX: remove US */
+		dir = mkentry(pmm_alloc_page(), DIR_FLAG_RW | DIR_FLAG_P);
 		DIR_VADDR[dir_id] = dir;
 		memset(TBL_VADDR(dir_id), 0, PAGE_SIZE);
 	}
@@ -342,11 +342,11 @@ static void init_physical_maps(void)
 
 	uint32_t dir_id = DIR_ID(g_pmm_bitmap);
 	uint32_t *dir_ptr = &DIR_VADDR[dir_id];
-	*dir_ptr = mkentry(g_pmm_addr, DIR_FLAG_P | DIR_FLAG_RW | DIR_FLAG_US); /* XXX: remove US */
+	*dir_ptr = mkentry(g_pmm_addr, DIR_FLAG_P | DIR_FLAG_RW);
 	uint32_t *tbl_ptr = TBL_VADDR(dir_id);
 	uint32_t tbl_id = TBL_ID(g_pmm_bitmap);
 	for (uint32_t i = 0; i < bitmap_pages; ++i)
-		tbl_ptr[tbl_id + i] = mkentry(g_pmm_addr + PAGE_SIZE + i * PAGE_SIZE, TBL_FLAG_P | TBL_FLAG_RW | TBL_FLAG_US); /* XXX: remove US */
+		tbl_ptr[tbl_id + i] = mkentry(g_pmm_addr + PAGE_SIZE + i * PAGE_SIZE, TBL_FLAG_P | TBL_FLAG_RW);
 
 	memset(g_pmm_bitmap, 0, bitmap_bytes);
 	for (size_t i = 0; i <= bitmap_pages; ++i)
@@ -362,7 +362,7 @@ static void init_heap_pages_tables(void)
 		uint32_t *dir = &DIR_VADDR[dir_id];
 		if (*dir != 0)
 			panic("non-NULL heap page table 0x%lx\n", addr);
-		*dir = mkentry(pmm_alloc_page(), DIR_FLAG_P | DIR_FLAG_RW | DIR_FLAG_US); /* XXX: remove US */
+		*dir = mkentry(pmm_alloc_page(), DIR_FLAG_P | DIR_FLAG_RW);
 		uint32_t *tbl_ptr = TBL_VADDR(dir_id);
 		memset(tbl_ptr, 0, 0x1000);
 	}

@@ -12,10 +12,9 @@ loop:
 
 static void userland(void)
 {
-	printf("userland\n");
-	uint32_t ret = syscall(0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6);
-	printf("syscall returned 0x%lx\n", ret);
-	while (1);
+	uint32_t ret = write(1, "userland\n", 9);
+loop:
+	goto loop;
 }
 
 void kernel_main(struct multiboot_info *mb_info)

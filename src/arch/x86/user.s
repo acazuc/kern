@@ -18,7 +18,6 @@ usermode:
 	iret
 
 syscall:
-	sub esp, 4
 	pushad
 	mov eax, [esp + 0x24]
 	mov ebx, [esp + 0x28]
@@ -28,7 +27,6 @@ syscall:
 	mov edi, [esp + 0x38]
 	mov ebp, [esp + 0x3C]
 	int 0x80
-	mov [esp + 0x20], eax
+	mov [esp + 0x1C], eax
 	popad
-	pop eax
 	ret

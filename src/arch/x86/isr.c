@@ -4,6 +4,7 @@
 #include "sys/std.h"
 #include "dev/ps2/ps2.h"
 #include "dev/pit/pit.h"
+#include "sys/errno.h"
 
 #include <stdint.h>
 
@@ -178,8 +179,28 @@ static void irq_handler_36(uint32_t err)
 static void handle_syscall(uint32_t err)
 {
 	uint32_t *args = (uint32_t*)err;
-	printf("syscall\n");
-	printf("id: %lx, arg1: %lx, arg2: %lx, arg3: %lx, arg4: %lx, arg5: %lx, arg6: %lx\n", args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
+	uint32_t id = args[1];
+	switch (id)
+	{
+		case 4:
+		{
+			int fd = args[2];
+			void *data = (void*)args[3];
+			size_t count = args[4];
+			if (fd != 1)
+			{
+				args[0] = -EBADF;
+				break;
+			}
+			for (size_t i = 0; i < count; ++i)
+				printf("%c", ((char*)data)[i]);
+			args[0] = count;
+			break;
+		}
+		default:
+			args[0] = -ENOSYS;
+			break;
+	}
 }
 
 void handle_exception(uint32_t id, uint32_t err)

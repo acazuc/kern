@@ -32,9 +32,9 @@ _start:
 	jb 2b
 
 	#setup dir page
-	movl $(tbl_page + 7), dir_page + 0x000 # identity; XXX: remove US
+	movl $(tbl_page + 3), dir_page + 0x000 # identity
 	movl $(tbl_page + 7), dir_page + 0xC00 # high mem; XXX: remove US
-	movl $(dir_page + 7), dir_page + 0xFFC # recursive; XXX: remove US
+	movl $(dir_page + 3), dir_page + 0xFFC # recursive
 
 	#setup paging
 	mov $dir_page, %eax

@@ -29,13 +29,14 @@ typedef struct tss_entry
 	uint32_t ldt;
 	uint16_t trap;
 	uint16_t iomap_base;
-} tss_entry_t;
+} __attribute__((packed)) tss_entry_t;
 
 typedef struct gdt_entry
 {
 	uint32_t base;
 	uint32_t limit;
 	uint8_t type;
+	uint8_t flags;
 } gdt_entry_t;
 
 typedef struct gtdr
@@ -44,18 +45,18 @@ typedef struct gtdr
 	uint32_t base;
 } __attribute__((packed)) gdtr_t;
 
-static uint8_t g_tss_stack[4096 * 4];
+static uint8_t g_tss_stack[4096 * 4]; /* per-process stack */
 static tss_entry_t g_tss;
 static gdtr_t g_gdtr;
 
 static const gdt_entry_t g_gdt_entries[] =
 {
-	{.base = 0               , .limit = 0            , .type = 0x00}, /* NULL */
-	{.base = 0               , .limit = 0xFFFFFFFF   , .type = 0x9A}, /* code */
-	{.base = 0               , .limit = 0xFFFFFFFF   , .type = 0x92}, /* data */
-	{.base = 0               , .limit = 0xFFFFFFFF   , .type = 0xFA}, /* user code */
-	{.base = 0               , .limit = 0xFFFFFFFF   , .type = 0xF2}, /* user data */
-	{.base = (uint32_t)&g_tss, .limit = sizeof(g_tss), .type = 0x89}, /* tss */
+	{.base = 0               , .limit = 0            , .type = 0x00, .flags = 0x40}, /* NULL */
+	{.base = 0               , .limit = 0xFFFFFFFF   , .type = 0x9A, .flags = 0x40}, /* code */
+	{.base = 0               , .limit = 0xFFFFFFFF   , .type = 0x92, .flags = 0x40}, /* data */
+	{.base = 0               , .limit = 0xFFFFFFFF   , .type = 0xFA, .flags = 0x40}, /* user code */
+	{.base = 0               , .limit = 0xFFFFFFFF   , .type = 0xF2, .flags = 0x40}, /* user data */
+	{.base = (uint32_t)&g_tss, .limit = sizeof(g_tss), .type = 0xE9, .flags = 0x00}, /* tss */
 };
 
 static uint8_t gdt_data[8 * sizeof(g_gdt_entries) / sizeof(*g_gdt_entries)];
@@ -65,11 +66,11 @@ static void encode_entry(uint8_t *target, gdt_entry_t source)
 	if (source.limit > 65536)
 	{
 		source.limit = source.limit >> 12;
-		target[6] = 0xC0;
+		target[6] = source.flags | 0x80;
 	}
 	else
 	{
-		target[6] = 0x40;
+		target[6] = source.flags;
 	}
 
 	target[0] = source.limit & 0xFF;
@@ -88,9 +89,10 @@ void gdt_init()
 		encode_entry(&gdt_data[8 * i], g_gdt_entries[i]);
 	g_gdtr.base = (uintptr_t)&gdt_data[0];
 	g_gdtr.limit = (uint16_t)sizeof(gdt_data) - 1;
-	__asm__ volatile ("lgdt %0" : : "m"(g_gdtr));
-	reload_segments();
+	memset(&g_tss, 0, sizeof(g_tss));
 	g_tss.ss0 = 0x10;
-	g_tss.esp0 = (uint32_t)&g_tss_stack[0];
-	__asm__ volatile ("mov $0x28, %ax; ltr %ax");
+	g_tss.esp0 = (uint32_t)&g_tss_stack[sizeof(g_tss_stack)];
+	__asm__ volatile ("lgdt %0" : : "m"(g_gdtr));
+	__asm__ volatile ("mov $0x28, %%ax; ltr %%ax" ::: "eax");
+	reload_segments();
 }

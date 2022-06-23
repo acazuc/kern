@@ -1,35 +1,68 @@
+load_segments:
+	push eax
+	mov ax, 0x10
+	mov ds, ax
+	mov es, ax
+	mov fs, ax
+	mov gs, ax
+	mov ss, ax
+	pop eax
+	ret
+
+isr_common:
+	;save ctx
+	push gs
+	push fs
+	push es
+	push ds
+	pushad
+	call load_segments
+
+	;call handler
+	mov eax, [esp + 13 * 4]
+	push eax
+	mov eax, [esp + 13 * 4]
+	push eax
+	cld
+	call handle_exception
+	add esp, 8
+
+	;restore ctx
+	popad
+	pop ds
+	pop es
+	pop fs
+	pop gs
+	add esp, 8
+	iret
+
 %macro isr_err 1
 isr_%+%1:
 	cli
-	pushad
-	cld
-	mov eax, [esp + 8 * 4]
-	push eax
 	push %1
-	call handle_exception
-	add esp, 8
-	popad
-	add esp, 4
-	iret
+	jmp isr_common
 %endmacro
 
 %macro isr_no_err 1
 isr_%+%1:
 	cli
-	pushad
-	cld
 	push 0
 	push %1
-	call handle_exception
-	add esp, 8
-	popad
-	iret
+	jmp isr_common
 %endmacro
 
 isr_128:
 	cli
+
+	;save ctx
 	pushad
-	cld
+	push gs
+	push fs
+	push es
+	push ds
+	call load_segments
+
+	;call handler
 	push ebp
 	push edi
 	push esi
@@ -37,13 +70,23 @@ isr_128:
 	push ecx
 	push ebx
 	push eax
+	sub esp, 4
 	push esp
 	push 128
-	call reload_segments
-	;call handle_exception
-	add esp, 36
+	cld
+	call handle_exception
+	add esp, 2 * 4
+	pop eax
+	mov eax, 15
+	mov [esp + 18 * 4], eax
+	add esp, 7 * 4
+
+	;restore ctx
+	pop ds
+	pop es
+	pop fs
+	pop gs
 	popad
-	mov eax, 10
 	iret
 
 extern handle_exception
@@ -82,7 +125,7 @@ isr_err    29
 isr_err    30
 isr_no_err 31
 
-; IRQ master
+;IRQ master
 isr_no_err 32
 isr_no_err 33
 isr_no_err 34
@@ -92,7 +135,7 @@ isr_no_err 37
 isr_no_err 38
 isr_no_err 39
 
-; IRQ slave
+;IRQ slave
 isr_no_err 40
 isr_no_err 41
 isr_no_err 42
@@ -102,7 +145,7 @@ isr_no_err 45
 isr_no_err 46
 isr_no_err 47
 
-; others
+;others
 %assign i 48
 %rep 208
 %if i != 0x80
@@ -115,6 +158,6 @@ global g_isr_table
 g_isr_table:
 %assign i 0
 %rep 256
-	dd isr_%+i ; use DQ instead if targeting 64-bit
+	dd isr_%+i
 %assign i i+1
 %endrep
