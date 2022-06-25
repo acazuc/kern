@@ -20,6 +20,7 @@ LDFILE = src/arch/x86/linker.ld
 
 SRC_NAME = kernel.c \
            shell.c \
+           user.c \
            arch/x86/boot.S \
            arch/x86/boot.c \
            arch/x86/gdt.c \

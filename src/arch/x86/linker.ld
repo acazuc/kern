@@ -19,6 +19,21 @@ SECTIONS
 		*(.multiboot.bss)
 	}
 
+	.userland.data BLOCK(4K) : ALIGN(4K)
+	{
+		obj/user.c.o(.data)
+	}
+
+	.userland.text BLOCK(4K) : ALIGN(4K)
+	{
+		obj/user.c.o(.text)
+	}
+
+	.userland.bss BLOCK(4K) : ALIGN(4K)
+	{
+		obj/user.c.o(.bss)
+	}
+
 	. += 0xC0000000;
 
 	.text BLOCK(4K) : AT(ADDR(.text) - 0xC0000000)
