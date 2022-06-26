@@ -1,8 +1,7 @@
 #include "com.h"
 
-#include "sys/std.h"
-#include "arch/x86/io.h"
-
+#include <sys/std.h>
+#include <arch/x86/io.h>
 #include <stdint.h>
 
 #define COM1 0x3F8

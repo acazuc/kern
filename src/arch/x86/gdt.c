@@ -1,6 +1,8 @@
 #include "x86.h"
 
-typedef struct tss_entry
+#include <sys/std.h>
+
+struct tss_entry
 {
 	uint32_t prev_tss;
 	uint32_t esp0;
@@ -29,27 +31,27 @@ typedef struct tss_entry
 	uint32_t ldt;
 	uint16_t trap;
 	uint16_t iomap_base;
-} __attribute__((packed)) tss_entry_t;
+} __attribute__((packed));
 
-typedef struct gdt_entry
+struct gdt_entry
 {
 	uint32_t base;
 	uint32_t limit;
 	uint8_t type;
 	uint8_t flags;
-} gdt_entry_t;
+};
 
-typedef struct gtdr
+struct gdtr
 {
 	uint16_t limit;
 	uint32_t base;
-} __attribute__((packed)) gdtr_t;
+} __attribute__((packed));
 
 static uint8_t g_tss_stack[4096 * 4]; /* per-process stack */
-static tss_entry_t g_tss;
-static gdtr_t g_gdtr;
+static struct tss_entry g_tss;
+static struct gdtr g_gdtr;
 
-static const gdt_entry_t g_gdt_entries[] =
+static const struct gdt_entry g_gdt_entries[] =
 {
 	{.base = 0               , .limit = 0            , .type = 0x00, .flags = 0x40}, /* NULL */
 	{.base = 0               , .limit = 0xFFFFFFFF   , .type = 0x9A, .flags = 0x40}, /* code */
@@ -61,32 +63,34 @@ static const gdt_entry_t g_gdt_entries[] =
 
 static uint8_t gdt_data[8 * sizeof(g_gdt_entries) / sizeof(*g_gdt_entries)];
 
-static void encode_entry(uint8_t *target, gdt_entry_t source)
+static void encode_entry(uint8_t *target, const struct gdt_entry *source)
 {
-	if (source.limit > 65536)
+	uint32_t limit;
+	if (source->limit > 65536)
 	{
-		source.limit = source.limit >> 12;
-		target[6] = source.flags | 0x80;
+		limit = source->limit >> 12;
+		target[6] = source->flags | 0x80;
 	}
 	else
 	{
-		target[6] = source.flags;
+		limit = source->limit;
+		target[6] = source->flags;
 	}
 
-	target[0] = source.limit & 0xFF;
-	target[1] = (source.limit >> 8) & 0xFF;
-	target[2] = source.base & 0xFF;
-	target[3] = (source.base >> 8) & 0xFF;
-	target[4] = (source.base >> 16) & 0xFF;
-	target[5] = source.type;
-	target[6] |= (source.limit >> 16) & 0xF;
-	target[7] = (source.base >> 24) & 0xFF;
+	target[0] = limit & 0xFF;
+	target[1] = (limit >> 8) & 0xFF;
+	target[2] = source->base & 0xFF;
+	target[3] = (source->base >> 8) & 0xFF;
+	target[4] = (source->base >> 16) & 0xFF;
+	target[5] = source->type;
+	target[6] |= (limit >> 16) & 0xF;
+	target[7] = (source->base >> 24) & 0xFF;
 }
 
 void gdt_init()
 {
 	for (size_t i = 0; i < sizeof(g_gdt_entries) / sizeof(*g_gdt_entries); ++i)
-		encode_entry(&gdt_data[8 * i], g_gdt_entries[i]);
+		encode_entry(&gdt_data[8 * i], &g_gdt_entries[i]);
 	g_gdtr.base = (uintptr_t)&gdt_data[0];
 	g_gdtr.limit = (uint16_t)sizeof(gdt_data) - 1;
 	memset(&g_tss, 0, sizeof(g_tss));

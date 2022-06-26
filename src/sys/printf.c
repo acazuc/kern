@@ -1,7 +1,6 @@
 #include "std.h"
 
-#include "shell.h"
-
+#include <shell.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -20,7 +19,7 @@
 #define FLAG_Z     (1 << 11)
 #define FLAG_T     (1 << 12)
 
-typedef struct arg
+struct arg
 {
 	va_list *va_arg;
 	uint32_t flags;
@@ -29,22 +28,22 @@ typedef struct arg
 	uint8_t type;
 	char j;
 	char z;
-} arg_t;
+};
 
-typedef struct printf_buf
+struct printf_buf
 {
 	char *data;
 	size_t size;
 	size_t len;
-} printf_buf_t;
+};
 
-typedef void (*print_fn_t)(printf_buf_t*, arg_t*);
+typedef void (*print_fn_t)(struct printf_buf*, struct arg*);
 
 static const print_fn_t g_print_fns[256];
 
-static bool parse_arg(arg_t *arg, const char *fmt, size_t *i);
+static bool parse_arg(struct arg *arg, const char *fmt, size_t *i);
 
-static void arg_ctr(arg_t *arg, va_list *va_arg)
+static void arg_ctr(struct arg *arg, va_list *va_arg)
 {
 	arg->va_arg = va_arg;
 	arg->flags = 0;
@@ -53,7 +52,7 @@ static void arg_ctr(arg_t *arg, va_list *va_arg)
 	arg->type = '\0';
 }
 
-static void putchar(printf_buf_t *buf, char c)
+static void putchar(struct printf_buf *buf, char c)
 {
 	if (buf->len < buf->size)
 		buf->data[buf->len] = c;
@@ -61,33 +60,33 @@ static void putchar(printf_buf_t *buf, char c)
 }
 
 #if 0
-static void putnstr(printf_buf_t *buf, const char *s, size_t n)
+static void putnstr(struct printf_buf *buf, const char *s, size_t n)
 {
 	for (size_t i = 0; s[i] && i < n; ++i)
 		putchar(buf, s[i]);
 }
 #endif
 
-static void putstr(printf_buf_t *buf, const char *s)
+static void putstr(struct printf_buf *buf, const char *s)
 {
 	for (size_t i = 0; s[i]; ++i)
 		putchar(buf, s[i]);
 }
 
-static void print_spaces(printf_buf_t *buf, size_t n)
+static void print_spaces(struct printf_buf *buf, size_t n)
 {
 	for (size_t i = 0; i < n; ++i)
 		putchar(buf, ' ');
 }
 
-static void print_zeros(printf_buf_t *buf, size_t n)
+static void print_zeros(struct printf_buf *buf, size_t n)
 {
 	for (size_t i = 0; i < n; ++i)
 		putchar(buf, '0');
 }
 
 #if 0
-static void print_arg_spaces(printf_buf_t *buf, arg_t *arg, size_t len)
+static void print_arg_spaces(struct printf_buf *buf, struct arg *arg, size_t len)
 {
 	size_t preci;
 	size_t width;
@@ -99,7 +98,7 @@ static void print_arg_spaces(printf_buf_t *buf, arg_t *arg, size_t len)
 }
 #endif
 
-static long long int get_int_val(arg_t *arg)
+static long long int get_int_val(struct arg *arg)
 {
 	if (arg->flags & FLAG_LL)
 		return va_arg(*arg->va_arg, long long int);
@@ -118,7 +117,7 @@ static long long int get_int_val(arg_t *arg)
 	return va_arg(*arg->va_arg, int);
 }
 
-static unsigned long long int get_uint_val(arg_t *arg)
+static unsigned long long int get_uint_val(struct arg *arg)
 {
 	if (arg->flags & FLAG_LL)
 		return va_arg(*arg->va_arg, unsigned long long int);
@@ -137,13 +136,13 @@ static unsigned long long int get_uint_val(arg_t *arg)
 	return va_arg(*arg->va_arg, unsigned int);
 }
 
-static int printf_buf(printf_buf_t *buf, const char *fmt, va_list va_arg)
+static int printf_buf(struct printf_buf *buf, const char *fmt, va_list va_arg)
 {
 	for (size_t i = 0; fmt[i]; ++i)
 	{
 		if (fmt[i] == '%')
 		{
-			arg_t arg;
+			struct arg arg;
 			i++;
 			arg_ctr(&arg, &va_arg);
 			parse_arg(&arg, fmt, &i);
@@ -165,7 +164,7 @@ static int printf_buf(printf_buf_t *buf, const char *fmt, va_list va_arg)
 int vprintf(const char *fmt, va_list va_arg)
 {
 	char str[4096];
-	printf_buf_t buf;
+	struct printf_buf buf;
 	buf.data = str;
 	buf.size = sizeof(str);
 	buf.len = 0;
@@ -185,7 +184,7 @@ int printf(const char *fmt, ...)
 
 int vsnprintf(char *d, size_t n, const char *fmt, va_list va_arg)
 {
-	printf_buf_t buf;
+	struct printf_buf buf;
 	buf.data = d;
 	buf.size = n;
 	buf.len = 0;
@@ -201,7 +200,7 @@ int snprintf(char *d, size_t n, const char *fmt, ...)
 	return ret;
 }
 
-static bool parse_flags(arg_t *arg, char c)
+static bool parse_flags(struct arg *arg, char c)
 {
 	if (c == '-')
 		arg->flags |= FLAG_MINUS;
@@ -218,7 +217,7 @@ static bool parse_flags(arg_t *arg, char c)
 	return true;
 }
 
-static bool parse_preci(arg_t *arg, const char *fmt, size_t *i)
+static bool parse_preci(struct arg *arg, const char *fmt, size_t *i)
 {
 	size_t start;
 	size_t end;
@@ -236,7 +235,7 @@ static bool parse_preci(arg_t *arg, const char *fmt, size_t *i)
 	return true;
 }
 
-static void parse_length(arg_t *arg, const char *fmt, size_t *i)
+static void parse_length(struct arg *arg, const char *fmt, size_t *i)
 {
 	if (fmt[*i] == 'h')
 	{
@@ -281,7 +280,7 @@ static void parse_length(arg_t *arg, const char *fmt, size_t *i)
 	}
 }
 
-static bool parse_width(arg_t *arg, const char *fmt, size_t *i)
+static bool parse_width(struct arg *arg, const char *fmt, size_t *i)
 {
 	size_t start;
 	size_t end;
@@ -296,7 +295,7 @@ static bool parse_width(arg_t *arg, const char *fmt, size_t *i)
 	return true;
 }
 
-static bool parse_arg(arg_t *arg, const char *fmt, size_t *i)
+static bool parse_arg(struct arg *arg, const char *fmt, size_t *i)
 {
 	while (parse_flags(arg, fmt[*i]))
 		(*i)++;
@@ -309,7 +308,7 @@ static bool parse_arg(arg_t *arg, const char *fmt, size_t *i)
 	return true;
 }
 
-static void print_str(printf_buf_t *buf, arg_t *arg, const char *prefix, const char *s)
+static void print_str(struct printf_buf *buf, struct arg *arg, const char *prefix, const char *s)
 {
 	size_t len = strlen(s);
 	size_t prefix_len;
@@ -336,7 +335,7 @@ static void print_str(printf_buf_t *buf, arg_t *arg, const char *prefix, const c
 	putstr(buf, s);
 }
 
-static void print_c(printf_buf_t *buf, arg_t *arg)
+static void print_c(struct printf_buf *buf, struct arg *arg)
 {
 	uint8_t vals[2];
 
@@ -353,7 +352,7 @@ static void print_c(printf_buf_t *buf, arg_t *arg)
 #endif
 }
 
-static void print_d(printf_buf_t *buf, arg_t *arg)
+static void print_d(struct printf_buf *buf, struct arg *arg)
 {
 	long long int val;
 	char str[64];
@@ -379,12 +378,12 @@ static void print_d(printf_buf_t *buf, arg_t *arg)
 #endif
 }
 
-static void print_i(printf_buf_t *buf, arg_t *arg)
+static void print_i(struct printf_buf *buf, struct arg *arg)
 {
 	print_d(buf, arg);
 }
 
-static void print_o(printf_buf_t *buf, arg_t *arg)
+static void print_o(struct printf_buf *buf, struct arg *arg)
 {
 	char str[64];
 	unsigned long long int val;
@@ -411,7 +410,7 @@ static void print_o(printf_buf_t *buf, arg_t *arg)
 #endif
 }
 
-static void print_s(printf_buf_t *buf, arg_t *arg)
+static void print_s(struct printf_buf *buf, struct arg *arg)
 {
 	char *str;
 
@@ -440,7 +439,7 @@ static void print_s(printf_buf_t *buf, arg_t *arg)
 #endif
 }
 
-static void print_u(printf_buf_t *buf, arg_t *arg)
+static void print_u(struct printf_buf *buf, struct arg *arg)
 {
 	char str[64];
 	unsigned long long int val;
@@ -465,14 +464,14 @@ static void print_u(printf_buf_t *buf, arg_t *arg)
 #endif
 }
 
-static char *get_x_chars(arg_t *arg)
+static char *get_x_chars(struct arg *arg)
 {
 	if (arg->type == 'X')
 		return "0123456789ABCDEF";
 	return "0123456789abcdef";
 }
 
-static void print_x(printf_buf_t *buf, arg_t *arg)
+static void print_x(struct printf_buf *buf, struct arg *arg)
 {
 	char str[64];
 	unsigned long long int val;
@@ -503,19 +502,19 @@ static void print_x(printf_buf_t *buf, arg_t *arg)
 #endif
 }
 
-static void print_X(printf_buf_t *buf, arg_t *arg)
+static void print_X(struct printf_buf *buf, struct arg *arg)
 {
 	print_x(buf, arg);
 }
 
-static void print_p(printf_buf_t *buf, arg_t *arg)
+static void print_p(struct printf_buf *buf, struct arg *arg)
 {
 	arg->flags |= FLAG_SHARP;
 	arg->flags &= ~(FLAG_LL | FLAG_H | FLAG_HH | FLAG_Z | FLAG_J | FLAG_T);
 	print_x(buf, arg);
 }
 
-static void print_mod(printf_buf_t *buf, arg_t *arg)
+static void print_mod(struct printf_buf *buf, struct arg *arg)
 {
 	(void)arg;
 	putchar(buf, '%');

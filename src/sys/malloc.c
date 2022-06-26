@@ -1,7 +1,6 @@
 #include "std.h"
 
-#include "arch/arch.h"
-
+#include <arch/arch.h>
 #include <stdbool.h>
 
 #define BLOCKS_SIZE ((BLOCKS_COUNT + 31) / 32)
@@ -9,8 +8,6 @@
 
 #define MALLOC_LOCK()
 #define MALLOC_UNLOCK()
-
-typedef struct page page_t;
 
 enum block_type
 {
@@ -71,11 +68,11 @@ struct page
 	enum block_type type;
 	size_t size;
 	uint8_t *addr;
-	page_t *next;
+	struct page *next;
 	uint32_t blocks[];
 };
 
-static page_t *g_pages;
+static struct page *g_pages;
 
 static enum block_type get_block_type(size_t size)
 {
@@ -87,9 +84,9 @@ static enum block_type get_block_type(size_t size)
 	return BLOCK_LARGE;
 }
 
-static page_t *alloc_page(enum block_type type, size_t size)
+static struct page *alloc_page(enum block_type type, size_t size)
 {
-	page_t *page;
+	struct page *page;
 	size_t alloc_size;
 	size_t blocks_size;
 
@@ -110,7 +107,7 @@ static page_t *alloc_page(enum block_type type, size_t size)
 	return page;
 }
 
-static bool is_page_free(page_t *page)
+static bool is_page_free(struct page *page)
 {
 	for (size_t i = 0; i < BLOCKS_SIZE; ++i)
 	{
@@ -120,10 +117,10 @@ static bool is_page_free(page_t *page)
 	return true;
 }
 
-static void remove_page(page_t *page)
+static void remove_page(struct page *page)
 {
-	page_t *prv;
-	page_t *lst;
+	struct page *prv;
+	struct page *lst;
 
 	prv = NULL;
 	lst = g_pages;
@@ -145,7 +142,7 @@ static void remove_page(page_t *page)
 static void check_free_pages(enum block_type type)
 {
 	bool one_free = false;
-	for (page_t *lst = g_pages; lst;)
+	for (struct page *lst = g_pages; lst;)
 	{
 		if (lst->type != type || !is_page_free(lst))
 		{
@@ -158,14 +155,14 @@ static void check_free_pages(enum block_type type)
 			lst = lst->next;
 			continue;
 		}
-		page_t *nxt = lst->next;
+		struct page *nxt = lst->next;
 		remove_page(lst);
 		vfree(lst, lst->size);
 		lst = nxt;
 	}
 }
 
-static void push_new_page(page_t *new)
+static void push_new_page(struct page *new)
 {
 	if (!g_pages)
 	{
@@ -173,7 +170,7 @@ static void push_new_page(page_t *new)
 		return;
 	}
 
-	page_t *lst = g_pages;
+	struct page *lst = g_pages;
 	while (lst->next)
 		lst = lst->next;
 	lst->next = new;
@@ -181,7 +178,7 @@ static void push_new_page(page_t *new)
 
 static void *create_new_block(enum block_type type, size_t size)
 {
-	page_t *page;
+	struct page *page;
 
 	page = alloc_page(type, type == BLOCK_LARGE ? size : g_block_sizes[type] * BLOCKS_COUNT);
 	if (!page)
@@ -191,7 +188,7 @@ static void *create_new_block(enum block_type type, size_t size)
 	return page->addr;
 }
 
-static int get_first_free(page_t *page)
+static int get_first_free(struct page *page)
 {
 	for (size_t i = 0; i < BLOCKS_SIZE; ++i)
 	{
@@ -210,7 +207,7 @@ static int get_first_free(page_t *page)
 
 static void *get_existing_block(enum block_type type)
 {
-	for (page_t *lst = g_pages; lst; lst = lst->next)
+	for (struct page *lst = g_pages; lst; lst = lst->next)
 	{
 		int i;
 		if (lst->type == type && (i = get_first_free(lst)) != -1)
@@ -222,7 +219,7 @@ static void *get_existing_block(enum block_type type)
 	return NULL;
 }
 
-static void *realloc_large(page_t *lst, void *ptr, size_t size)
+static void *realloc_large(struct page *lst, void *ptr, size_t size)
 {
 	void *addr;
 	size_t len;
@@ -243,7 +240,7 @@ static void *realloc_large(page_t *lst, void *ptr, size_t size)
 	return addr;
 }
 
-static void *realloc_blocky(page_t *lst, void *ptr, size_t size)
+static void *realloc_blocky(struct page *lst, void *ptr, size_t size)
 {
 	void *addr;
 	size_t len;
@@ -289,13 +286,13 @@ void *malloc(size_t size, uint32_t flags)
 
 void free(void *ptr)
 {
-	page_t *prv;
+	struct page *prv;
 
 	if (!ptr)
 		return;
 	MALLOC_LOCK();
 	prv = NULL;
-	for (page_t *lst = g_pages; lst; prv = lst, lst = lst->next)
+	for (struct page *lst = g_pages; lst; prv = lst, lst = lst->next)
 	{
 		if (lst->type == BLOCK_LARGE)
 		{
@@ -338,7 +335,7 @@ void *realloc(void *ptr, size_t size, uint32_t flags)
 		return NULL;
 	}
 	MALLOC_LOCK();
-	for (page_t *lst = g_pages; lst; lst = lst->next)
+	for (struct page *lst = g_pages; lst; lst = lst->next)
 	{
 		if (lst->type == BLOCK_LARGE)
 		{
@@ -371,14 +368,14 @@ static void c_e(void **start, void *end, size_t *total)
 	*start = NULL;
 }
 
-static void print_page(page_t *page, size_t *total)
+static void print_page(struct page *page, size_t *total)
 {
 	void *start;
 	int i;
 
 	if (page->type == BLOCK_LARGE)
 	{
-		*total += page->size - sizeof(page_t);
+		*total += page->size - sizeof(struct page);
 		print_block((size_t)page->addr, (size_t)(page->addr + page->size), page->size);
 		return;
 	}
@@ -395,14 +392,14 @@ static void print_page(page_t *page, size_t *total)
 		c_e(&start, page->addr + i * g_block_sizes[page->type], total);
 }
 
-static page_t *try_push(size_t min)
+static struct page *try_push(size_t min)
 {
-	page_t *lowest;
+	struct page *lowest;
 	size_t lowest_val;
 
 	lowest = NULL;
 	lowest_val = -1;
-	for (page_t *lst = g_pages; lst; lst = lst->next)
+	for (struct page *lst = g_pages; lst; lst = lst->next)
 	{
 		if ((lowest_val == 0 || (size_t)lst < lowest_val) && (size_t)lst > min)
 		{
@@ -415,7 +412,7 @@ static page_t *try_push(size_t min)
 
 void show_alloc_mem()
 {
-	page_t *tmp;
+	struct page *tmp;
 	size_t total;
 
 	MALLOC_LOCK();

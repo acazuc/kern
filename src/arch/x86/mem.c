@@ -1,5 +1,7 @@
 #include "x86.h"
-#include "sys/std.h"
+
+#include <sys/std.h>
+#include <sys/proc.h>
 
 /*
  * virtual memory layout
@@ -175,38 +177,36 @@ static void vmm_free_page(uint32_t addr)
 	INVALIDATE_PAGE(addr);
 }
 
-typedef struct vmm_free_range vmm_free_range_t;
-
-struct vmm_free_range
+struct vmm_range
 {
 	uint32_t addr;
 	uint32_t size;
-	vmm_free_range_t *prev;
-	vmm_free_range_t *next;
+	struct vmm_range *prev;
+	struct vmm_range *next;
 };
 
-typedef struct vmm_free_ctx_s
+struct vmm_ctx
 {
 	uint32_t addr;
 	uint32_t size;
-	vmm_free_range_t free_range_0; /* always have an available item */
-	vmm_free_range_t *free_ranges; /* address-ordered */
-} vmm_free_ctx_t;
+	struct vmm_range range_0; /* always have an available item */
+	struct vmm_range *ranges; /* address-ordered */
+};
 
-static vmm_free_ctx_t g_vmm_heap_free_ctx; /* kernel heap */
+static struct vmm_ctx g_vmm_heap_ctx; /* kernel heap */
 
-static uint32_t vmm_get_free_range(vmm_free_ctx_t *ctx, uint32_t size)
+static uint32_t vmm_get_free_range(struct vmm_ctx *ctx, uint32_t size)
 {
-	if (!ctx->free_ranges)
+	if (!ctx->ranges)
 	{
-		ctx->free_ranges = &ctx->free_range_0;
-		ctx->free_range_0.prev = NULL;
-		ctx->free_range_0.next = NULL;
-		ctx->free_range_0.addr = ctx->addr + size;
-		ctx->free_range_0.size = ctx->size - size;
+		ctx->ranges = &ctx->range_0;
+		ctx->range_0.prev = NULL;
+		ctx->range_0.next = NULL;
+		ctx->range_0.addr = ctx->addr + size;
+		ctx->range_0.size = ctx->size - size;
 		return ctx->addr;
 	}
-	for (vmm_free_range_t *item = ctx->free_ranges; item; item = item->next)
+	for (struct vmm_range *item = ctx->ranges; item; item = item->next)
 	{
 		if (item->size >= size)
 		{
@@ -219,18 +219,18 @@ static uint32_t vmm_get_free_range(vmm_free_ctx_t *ctx, uint32_t size)
 	return UINT32_MAX;
 }
 
-static void vmm_set_free_range(vmm_free_ctx_t *ctx, uint32_t addr, uint32_t size)
+static void vmm_set_free_range(struct vmm_ctx *ctx, uint32_t addr, uint32_t size)
 {
-	if (!ctx->free_ranges)
+	if (!ctx->ranges)
 	{
-		ctx->free_ranges = &ctx->free_range_0;
-		ctx->free_range_0.prev = NULL;
-		ctx->free_range_0.next = NULL;
-		ctx->free_range_0.addr = addr;
-		ctx->free_range_0.size = size;
+		ctx->ranges = &ctx->range_0;
+		ctx->range_0.prev = NULL;
+		ctx->range_0.next = NULL;
+		ctx->range_0.addr = addr;
+		ctx->range_0.size = size;
 		return;
 	}
-	for (vmm_free_range_t *item = ctx->free_ranges; ; item = item->next)
+	for (struct vmm_range *item = ctx->ranges; ; item = item->next)
 	{
 		if (item->addr == addr + size)
 		{
@@ -244,7 +244,7 @@ static void vmm_set_free_range(vmm_free_ctx_t *ctx, uint32_t addr, uint32_t size
 					item->prev->next = item->next;
 					if (item->next)
 						item->next->prev = item->prev;
-					if (item != &ctx->free_range_0)
+					if (item != &ctx->range_0)
 						free(item);
 				}
 			}
@@ -260,8 +260,8 @@ static void vmm_set_free_range(vmm_free_ctx_t *ctx, uint32_t addr, uint32_t size
 					item->size += item->next->size;
 					if (item->next->next)
 						item->next->next->prev = item;
-					vmm_free_range_t *next = item->next->next;
-					if (item->next != &ctx->free_range_0)
+					struct vmm_range *next = item->next->next;
+					if (item->next != &ctx->range_0)
 						free(item->next);
 					item->next = next;
 				}
@@ -270,7 +270,7 @@ static void vmm_set_free_range(vmm_free_ctx_t *ctx, uint32_t addr, uint32_t size
 		}
 		if (addr < item->addr)
 		{
-			vmm_free_range_t *new = malloc(sizeof(*new), 0);
+			struct vmm_range *new = malloc(sizeof(*new), 0);
 			if (!new)
 				panic("can't allocate new free space\n");
 			new->next = item;
@@ -279,14 +279,14 @@ static void vmm_set_free_range(vmm_free_ctx_t *ctx, uint32_t addr, uint32_t size
 			if (new->prev)
 				new->prev->next = new;
 			else
-				ctx->free_ranges = new;
+				ctx->ranges = new;
 			new->addr = addr;
 			new->size = size;
 			return;
 		}
 		if (!item->next)
 		{
-			vmm_free_range_t *new = malloc(sizeof(*new), 0);
+			struct vmm_range *new = malloc(sizeof(*new), 0);
 			if (!new)
 				panic("can't allocate new free space\n");
 			new->next = NULL;
@@ -300,11 +300,20 @@ static void vmm_set_free_range(vmm_free_ctx_t *ctx, uint32_t addr, uint32_t size
 	panic("dead code\n");
 }
 
-void *vmalloc(size_t size)
+struct vmm_ctx *create_vmm_ctx()
+{
+	struct vmm_ctx *ctx = malloc(sizeof(*ctx), 0);
+	ctx->addr = VADDR_USER_BEG;
+	ctx->size = VADDR_USER_END - VADDR_USER_BEG;
+	ctx->ranges = NULL;
+	return ctx;
+}
+
+static void *vmalloc_zone(struct vmm_ctx *ctx, size_t size)
 {
 	if (size & PAGE_MASK)
 		panic("vmalloc unaligned size 0x%lx\n", size);
-	uint32_t addr = vmm_get_free_range(&g_vmm_heap_free_ctx, size);
+	uint32_t addr = vmm_get_free_range(ctx, size);
 	if (addr == UINT32_MAX)
 		return NULL;
 	if (addr & PAGE_MASK)
@@ -314,16 +323,36 @@ void *vmalloc(size_t size)
 	return (void*)addr;
 }
 
-void vfree(void *ptr, size_t size)
+static void vfree_zone(struct vmm_ctx *ctx, void *ptr, size_t size)
 {
 	uint32_t addr = (uint32_t)ptr;
 	if (addr & PAGE_MASK)
 		panic("free of unaligned addr: 0x%lx\n", addr);
 	if (size & PAGE_MASK)
 		panic("free of unaligned size: 0x%lx\n", size);
-	vmm_set_free_range(&g_vmm_heap_free_ctx, addr, size);
+	vmm_set_free_range(ctx, addr, size);
 	for (uint32_t i = 0; i < size; i += PAGE_SIZE)
 		vmm_free_page(addr + i);
+}
+
+void *vmalloc(size_t size)
+{
+	return vmalloc_zone(&g_vmm_heap_ctx, size);
+}
+
+void vfree(void *ptr, size_t size)
+{
+	vfree_zone(&g_vmm_heap_ctx, ptr, size);
+}
+
+void *vmalloc_user(size_t size)
+{
+	return vmalloc_zone(curthread->proc->vmm_ctx, size);
+}
+
+void vfree_user(void *ptr, size_t size)
+{
+	vfree_zone(curthread->proc->vmm_ctx, ptr, size);
 }
 
 static void init_physical_maps(void)
@@ -375,9 +404,9 @@ void paging_init(uint32_t addr, uint32_t size)
 	printf("initializing memory 0x%lx-0x%lx (%lu)\n", addr, addr + size, size);
 	init_physical_maps();
 	init_heap_pages_tables();
-	g_vmm_heap_free_ctx.addr = VADDR_HEAP_BEG;
-	g_vmm_heap_free_ctx.size = VADDR_HEAP_END - VADDR_HEAP_BEG;
-	g_vmm_heap_free_ctx.free_ranges = NULL;
+	g_vmm_heap_ctx.addr = VADDR_HEAP_BEG;
+	g_vmm_heap_ctx.size = VADDR_HEAP_END - VADDR_HEAP_BEG;
+	g_vmm_heap_ctx.ranges = NULL;
 }
 
 static void pmm_dumpinfo(void)
@@ -404,7 +433,7 @@ static void pmm_dumpinfo(void)
 
 static void vmm_dumpinfo(void)
 {
-	for (vmm_free_range_t *item = g_vmm_heap_free_ctx.free_ranges; item; item = item->next)
+	for (struct vmm_range *item = g_vmm_heap_ctx.ranges; item; item = item->next)
 	{
 		printf("0x%lx - 0x%lx: 0x%lx bytes\n", item->addr, item->addr + item->size, item->size);
 	}

@@ -1,5 +1,5 @@
-#ifndef KBD_H
-#define KBD_H
+#ifndef SYS_KBD_H
+#define SYS_KBD_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -140,17 +140,17 @@ enum kbd_mod
 	KBD_MOD_ALT     = (1 << 2),
 };
 
-typedef struct kbd_key_evt
+struct kbd_key_evt
 {
 	enum kbd_key key;
 	enum kbd_mod mod;
 	bool pressed;
-} kbd_key_evt_t;
+};
 
-typedef struct kbd_char_evt
+struct kbd_char_evt
 {
 	uint32_t scancode;
 	char utf8[5];
-} kbd_char_evt_t;
+};
 
 #endif

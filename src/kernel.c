@@ -1,6 +1,9 @@
-#include "arch/arch.h"
+#include <arch/arch.h>
+#include <sys/proc.h>
+#include <sys/file.h>
+#include <sys/std.h>
+#include <fs/vfs.h>
 
-#include "sys/std.h"
 #include "shell.h"
 
 static void infl(void)
@@ -10,11 +13,34 @@ loop:
 	goto loop;
 }
 
-static void userland(void)
+void userland(void);
+
+extern struct fs_node g_ramfs_root;
+
+struct proc *curproc;
+struct thread *curthread;
+
+static struct thread *proc_create_user(void *entry)
 {
-	uint32_t ret = write(1, "userland\n", 9);
-loop:
-	goto loop;
+	struct proc *proc = malloc(sizeof(*proc), 0);
+	if (!proc)
+		panic("can't alloc proc\n");
+	struct thread *thread = malloc(sizeof(*thread), 0);
+	if (!thread)
+		panic("can't alloc thread\n");
+	thread->proc = proc;
+	proc->files = NULL;
+	proc->files_nb = 0;
+	proc->vmm_ctx = create_vmm_ctx();
+	if (!proc->vmm_ctx)
+		panic("vmm ctx allocation failed\n");
+	LIST_INIT(&proc->threads);
+	LIST_INSERT_HEAD(&proc->threads, thread, thread_chain);
+	proc->entrypoint = entry;
+	proc->pid = 1;
+	proc->uid = 0;
+	proc->gid = 0;
+	return thread;
 }
 
 void kernel_main(struct multiboot_info *mb_info)
@@ -40,6 +66,9 @@ void kernel_main(struct multiboot_info *mb_info)
 		free(s[i]);
 	free(s);
 	printf("boot end\n");
+	struct thread *thread = proc_create_user(userland);
+	curthread = thread;
+	curproc = thread->proc;
 	usermode(&userland);
 	printf("past usermode\n");
 	infl();

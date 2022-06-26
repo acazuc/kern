@@ -5,8 +5,8 @@
 
 void shell_init(void);
 void shell_input_init(void);
-void shell_char_evt(const kbd_char_evt_t *evt);
-void shell_key_evt(const kbd_key_evt_t *evt);
+void shell_char_evt(const struct kbd_char_evt *evt);
+void shell_key_evt(const struct kbd_key_evt *evt);
 void shell_putstr(const char *s);
 void shell_putline(const char *s);
 

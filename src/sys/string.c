@@ -173,6 +173,17 @@ char *strchr(const char *s, int c)
 	return NULL;
 }
 
+char *strchrnul(const char *s, int c)
+{
+	size_t i;
+	for (i = 0; s[i]; ++i)
+	{
+		if (s[i] == (char)c)
+			return (char*)s + i;
+	}
+	return (char*)s + i;
+}
+
 char *strrchr(const char *s, int c)
 {
 	char *ret = NULL;
@@ -232,8 +243,8 @@ int strcmp(const char *s1, const char *s2)
 
 int strncmp(const char *s1, const char *s2, size_t n)
 {
-	size_t i = 0;
-	while (i < n && ((uint8_t*)s1)[i] && ((uint8_t*)s2)[i])
+	size_t i;
+	for (i = 0; i < n && ((uint8_t*)s1)[i] && ((uint8_t*)s2)[i]; ++i)
 	{
 		uint8_t d = ((uint8_t*)s1)[i] - ((uint8_t*)s2)[i];
 		if (d)

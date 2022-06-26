@@ -21,6 +21,7 @@ LDFILE = src/arch/x86/linker.ld
 SRC_NAME = kernel.c \
            shell.c \
            user.c \
+           user.s \
            arch/x86/boot.S \
            arch/x86/boot.c \
            arch/x86/gdt.c \
@@ -30,6 +31,7 @@ SRC_NAME = kernel.c \
            arch/x86/isr.c \
            arch/x86/mem.c \
            arch/x86/user.s \
+           arch/x86/sys.c \
            dev/pic/pic.c \
            dev/vga/vga.c \
            dev/pit/pit.c \
@@ -39,6 +41,9 @@ SRC_NAME = kernel.c \
            sys/string.c \
            sys/printf.c \
            sys/malloc.c \
+           fs/vfs.c \
+           fs/devfs/devfs.c \
+           fs/ramfs/ramfs.c \
 
 SRC_PATH = src
 
@@ -104,6 +109,9 @@ odir:
 	@mkdir -p $(OBJ_PATH)/dev/ps2
 	@mkdir -p $(OBJ_PATH)/dev/ide
 	@mkdir -p $(OBJ_PATH)/sys
+	@mkdir -p $(OBJ_PATH)/fs
+	@mkdir -p $(OBJ_PATH)/fs/devfs
+	@mkdir -p $(OBJ_PATH)/fs/ramfs
 
 clean:
 	@rm -f $(OBJ)

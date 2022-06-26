@@ -1,5 +1,5 @@
-#ifndef UTF16_H
-#define UTF16_H
+#ifndef SYS_UTF16_H
+#define SYS_UTF16_H
 
 #include <stdbool.h>
 #include <stdint.h>

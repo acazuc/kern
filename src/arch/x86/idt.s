@@ -77,7 +77,6 @@ isr_128:
 	call handle_exception
 	add esp, 2 * 4
 	pop eax
-	mov eax, 15
 	mov [esp + 18 * 4], eax
 	add esp, 7 * 4
 
@@ -90,7 +89,6 @@ isr_128:
 	iret
 
 extern handle_exception
-extern reload_segments
 
 isr_no_err 0
 isr_no_err 1

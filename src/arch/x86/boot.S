@@ -15,25 +15,37 @@
 .section .multiboot.bss, "aw"
 dir_page:
 .skip 4096
-tbl_page:
+kern_tbl:
+.skip 4096
+user_tbl:
 .skip 4096
 
 .section .multiboot.text, "ax"
 .global _start
 .type _start, @function
 _start:
-	#setup tbl page
-	mov $7, %eax # P | RW | US; XXX: remove US
-	mov $tbl_page, %edi
+	#setup kern tbl
+	mov $3, %eax
+	mov $kern_tbl, %edi
 2:	mov %eax, (%edi)
 	add $4096, %eax
 	add $4, %edi
-	cmp $(tbl_page + 4096), %edi
+	cmp $(kern_tbl + 4096), %edi
 	jb 2b
 
+	#setup user tbl
+	mov $0x400007, %eax
+	mov $user_tbl, %edi
+3:	mov %eax, (%edi)
+	add $4096, %eax
+	add $4, %edi
+	cmp $(user_tbl + 4096), %edi
+	jb 3b
+
 	#setup dir page
-	movl $(tbl_page + 3), dir_page + 0x000 # identity
-	movl $(tbl_page + 7), dir_page + 0xC00 # high mem; XXX: remove US
+	movl $(kern_tbl + 3), dir_page + 0x000 # identity
+	movl $(user_tbl + 7), dir_page + 0x004 # userland
+	movl $(kern_tbl + 3), dir_page + 0xC00 # high mem
 	movl $(dir_page + 3), dir_page + 0xFFC # recursive
 
 	#setup paging

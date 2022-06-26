@@ -1,16 +1,18 @@
 #include "x86.h"
-#include "dev/pic/pic.h"
-#include "dev/pit/pit.h"
-#include "dev/vga/vga.h"
-#include "dev/com/com.h"
-#include "dev/ps2/ps2.h"
-#include "dev/ide/ide.h"
-#include "sys/std.h"
-#include "io.h"
-#include "multiboot.h"
 
+#include <dev/pic/pic.h>
+#include <dev/pit/pit.h>
+#include <dev/vga/vga.h>
+#include <dev/com/com.h>
+#include <dev/ps2/ps2.h>
+#include <dev/ide/ide.h>
+#include <multiboot.h>
+#include <sys/std.h>
 #include <stdbool.h>
 #include <cpuid.h>
+
+
+#include "io.h"
 
 enum cpuid_feature
 {

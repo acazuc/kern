@@ -1,10 +1,9 @@
 #include "ide.h"
 
-#include "arch/x86/x86.h"
-#include "arch/x86/io.h"
-#include "sys/errno.h"
-#include "sys/std.h"
-
+#include <arch/x86/x86.h>
+#include <arch/x86/io.h>
+#include <sys/errno.h>
+#include <sys/std.h>
 #include <stdint.h>
 
 #define ATA_SR_BSY  0x80 /* busy */

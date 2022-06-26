@@ -1,11 +1,10 @@
 #include "ps2.h"
 
-#include "arch/x86/io.h"
-#include "sys/std.h"
-#include "sys/kbd.h"
-#include "sys/utf8.h"
-#include "shell.h"
-
+#include <arch/x86/io.h>
+#include <sys/std.h>
+#include <sys/kbd.h>
+#include <sys/utf8.h>
+#include <shell.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -297,7 +296,7 @@ void ps2_interrupt()
 	/* XXX: generic input events handlers */
 	if (!release)
 	{
-		kbd_char_evt_t char_evt;
+		struct kbd_char_evt char_evt;
 		char_evt.scancode = get_scancode(key, g_kbd_mods);
 		if (char_evt.scancode)
 		{
@@ -312,7 +311,7 @@ void ps2_interrupt()
 			}
 		}
 	}
-	kbd_key_evt_t key_evt;
+	struct kbd_key_evt key_evt;
 	key_evt.key = key;
 	key_evt.mod = g_kbd_mods;
 	key_evt.pressed = !release;

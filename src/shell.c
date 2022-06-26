@@ -1,13 +1,12 @@
 #include "shell.h"
 
-#include "dev/vga/vga.h"
-#include "sys/std.h"
-#include "dev/pit/pit.h"
-#include "dev/com/com.h"
-#include "arch/arch.h"
-
-#include <stddef.h>
+#include <dev/vga/vga.h>
+#include <dev/pit/pit.h>
+#include <dev/com/com.h>
+#include <arch/arch.h>
+#include <sys/std.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #define INPUT_PREFIX "#> "
 #define INPUT_PREFIX_LEN (sizeof(INPUT_PREFIX) - 1)
@@ -32,7 +31,7 @@ static void reset_input(void)
 	g_input[g_input_col] = '\0';
 }
 
-void shell_char_evt(const kbd_char_evt_t *evt)
+void shell_char_evt(const struct kbd_char_evt *evt)
 {
 	if (!g_input_init)
 		return;
@@ -52,7 +51,7 @@ static void print_time(void)
 	printf("[%llu] ", ts.tv_sec);
 }
 
-void shell_key_evt(const kbd_key_evt_t *evt)
+void shell_key_evt(const struct kbd_key_evt *evt)
 {
 	if (!g_input_init)
 		return;

@@ -19,22 +19,29 @@ SECTIONS
 		*(.multiboot.bss)
 	}
 
+	_boot_end = .;
+
+	. = 4M;
+
 	.userland.data BLOCK(4K) : ALIGN(4K)
 	{
 		obj/user.c.o(.data)
+		obj/user.s.o(.data)
 	}
 
 	.userland.text BLOCK(4K) : ALIGN(4K)
 	{
 		obj/user.c.o(.text)
+		obj/user.s.o(.text)
 	}
 
 	.userland.bss BLOCK(4K) : ALIGN(4K)
 	{
 		obj/user.c.o(.bss)
+		obj/user.s.o(.bss)
 	}
 
-	. += 0xC0000000;
+	. = _boot_end + 0xC0000000;
 
 	.text BLOCK(4K) : AT(ADDR(.text) - 0xC0000000)
 	{
