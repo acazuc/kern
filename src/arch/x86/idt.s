@@ -21,11 +21,14 @@ isr_common:
 	;call handler
 	mov eax, [esp + 13 * 4]
 	push eax
-	mov eax, [esp + 13 * 4]
+	mov eax, [esp + 15 * 4]
+	push eax
+	push esp
+	mov eax, [esp + 15 * 4]
 	push eax
 	cld
 	call handle_exception
-	add esp, 8
+	add esp, 0x10
 
 	;restore ctx
 	popad
@@ -33,7 +36,7 @@ isr_common:
 	pop es
 	pop fs
 	pop gs
-	add esp, 8
+	add esp, 0x8
 	iret
 
 %macro isr_err 1

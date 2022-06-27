@@ -12,7 +12,7 @@
 .long MULTIBOOT_FLAGS
 .long MULTIBOOT_CHECKSUM
 
-.section .multiboot.bss, "aw"
+.section .multiboot.bss, "aw", @nobits
 dir_page:
 .skip 4096
 kern_tbl:

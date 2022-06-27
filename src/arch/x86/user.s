@@ -10,7 +10,7 @@ usermode:
 	mov gs, ax
 
 	push 0x23
-	push g_userland_stack
+	push g_userland_stack + 4096 * 4
 	pushfd
 	push 0x1B
 	push edx

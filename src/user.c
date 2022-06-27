@@ -92,11 +92,6 @@ static int close(int fd)
 void userland()
 {
 	OUT("userland\n");
-	OUT("tes\n");
-	OUT("tes\n");
-	OUT("tes\n");
-	OUT("tes\n");
-	OUT("tes\n");
 	int ret = open("/dev/tty0", O_RDONLY);
 	if (ret < 0)
 		OUT("failed to open /dev/tty0\n");
