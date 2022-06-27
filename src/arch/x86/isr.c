@@ -168,7 +168,6 @@ static void handle_syscall(struct exception_ctx *ctx)
 {
 	uint32_t *args = (uint32_t*)ctx;
 	args[0] = call_sys(args + 1);
-	printf("a!\n");
 }
 
 void handle_exception(uint32_t id, struct exception_ctx *ctx)

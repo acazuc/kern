@@ -12,7 +12,7 @@ typedef uint32_t mode_t;
 #define O_CREAT  (1 << 4)
 #define O_TRUNC  (1 << 5)
 
-uint8_t g_userland_stack[4096 * 4];
+uint8_t g_userland_stack[4096 * 4]; /* XXX: move to vmalloc_user allocation */
 
 int32_t errno;
 

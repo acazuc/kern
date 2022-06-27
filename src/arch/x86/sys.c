@@ -37,23 +37,19 @@ static int sys_write(int fd, const void *data, size_t count)
 static int sys_open(const char *path, int flags, mode_t mode)
 {
 	(void)mode;
-	printf("a\n");
+	(void)flags;
 	struct fs_node *node;
 	int ret = vfs_getnode(NULL, path, &node);
-	printf("a1\n");
 	if (ret)
 		return -ret;
-	printf("b\n");
 	struct file *file = malloc(sizeof(*file), 0);
 	if (file == NULL)
 	{
 		/* XXX: decref node */
 		return -ENOMEM;
 	}
-	printf("c\n");
 	file->node = node;
 	struct filedesc *fd = realloc(curproc->files, sizeof(*curproc->files) * (curproc->files_nb + 1), 0);
-	printf("isok\n");
 	if (!fd)
 	{
 		/* XXX: decref node */
@@ -73,7 +69,7 @@ static int sys_close(int fd)
 	return -ENOSYS;
 }
 
-static (*g_syscalls[])() =
+static int (*g_syscalls[])() =
 {
 	NULL,
 	sys_exit,
