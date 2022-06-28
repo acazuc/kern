@@ -1,5 +1,5 @@
-#ifndef SYS_ERRNO_H
-#define SYS_ERRNO_H
+#ifndef ERRNO_H
+#define ERRNO_H
 
 #define E2BIG           1  /* Argument list too long. */
 #define EACCES          2  /* Permission denied. */
@@ -61,26 +61,26 @@
 #define ENOTEMPTY       58 /* Directory not empty. */
 #define ENOTRECOVERABLE 59 /* State not recoverable. */
 #define ENOTSOCK        60 /* Not a socket. */
-#define ENOTSUP         61 /* Not supported (may be the same value as [EOPNOTSUPP]). */
-#define ENOTTY          62 /* Inappropriate I/O control operation. */
-#define ENXIO           63 /* No such device or address. */
-#define EOPNOTSUPP      64 /* Operation not supported on socket (may be the same value as [ENOTSUP]). */
-#define EOVERFLOW       65 /* Value too large to be stored in data type. */
-#define EOWNERDEAD      66 /* Previous owner died. */
-#define EPERM           67 /* Operation not permitted. */
-#define EPIPE           68 /* Broken pipe. */
-#define EPROTO          69 /* Protocol error. */
-#define EPROTONOSUPPORT 70 /* Protocol not supported. */
-#define EPROTOTYPE      71 /* Protocol wrong type for socket. */
-#define ERANGE          72 /* Result too large. */
-#define EROFS           73 /* Read-only file system. */
-#define ESPIPE          74 /* Invalid seek. */
-#define ESRCH           75 /* No such process. */
-#define ESTALE          76 /* Reserved. */
-#define ETIME           77 /* [OB XSR] [Option Start] Stream ioctl() timeout. [Option End] */
-#define ETIMEDOUT       78 /* Connection timed out. */
-#define ETXTBSY         79 /* Text file busy. */
+#define ENOTSUP         EOPNOTSUPP /* Not supported (may be the same value as [EOPNOTSUPP]). */
+#define ENOTTY          61 /* Inappropriate I/O control operation. */
+#define ENXIO           62 /* No such device or address. */
+#define EOPNOTSUPP      63 /* Operation not supported on socket (may be the same value as [ENOTSUP]). */
+#define EOVERFLOW       64 /* Value too large to be stored in data type. */
+#define EOWNERDEAD      65 /* Previous owner died. */
+#define EPERM           66 /* Operation not permitted. */
+#define EPIPE           67 /* Broken pipe. */
+#define EPROTO          68 /* Protocol error. */
+#define EPROTONOSUPPORT 69 /* Protocol not supported. */
+#define EPROTOTYPE      70 /* Protocol wrong type for socket. */
+#define ERANGE          71 /* Result too large. */
+#define EROFS           72 /* Read-only file system. */
+#define ESPIPE          73 /* Invalid seek. */
+#define ESRCH           74 /* No such process. */
+#define ESTALE          75 /* Reserved. */
+#define ETIME           76 /* [OB XSR] [Option Start] Stream ioctl() timeout. [Option End] */
+#define ETIMEDOUT       77 /* Connection timed out. */
+#define ETXTBSY         78 /* Text file busy. */
 #define EWOULDBLOCK     EAGAIN /* Operation would block (may be the same value as [EAGAIN]). */
-#define EXDEV           80 /* Cross-device link. */
+#define EXDEV           79 /* Cross-device link. */
 
 #endif

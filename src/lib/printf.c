@@ -1,10 +1,11 @@
-#include "std.h"
+#include "shell.h"
 
-#include <shell.h>
+#include <string.h>
 #include <stdarg.h>
 #include <stdint.h>
-#include <stdbool.h>
 #include <stddef.h>
+#include <stdlib.h>
+#include <ctype.h>
 
 #define FLAG_MINUS (1 << 0)
 #define FLAG_SPACE (1 << 2)
@@ -41,7 +42,7 @@ typedef void (*print_fn_t)(struct printf_buf*, struct arg*);
 
 static const print_fn_t g_print_fns[256];
 
-static bool parse_arg(struct arg *arg, const char *fmt, size_t *i);
+static int parse_arg(struct arg *arg, const char *fmt, size_t *i);
 
 static void arg_ctr(struct arg *arg, va_list *va_arg)
 {
@@ -200,7 +201,7 @@ int snprintf(char *d, size_t n, const char *fmt, ...)
 	return ret;
 }
 
-static bool parse_flags(struct arg *arg, char c)
+static int parse_flags(struct arg *arg, char c)
 {
 	if (c == '-')
 		arg->flags |= FLAG_MINUS;
@@ -213,26 +214,26 @@ static bool parse_flags(struct arg *arg, char c)
 	else if (c == ' ')
 		arg->flags |= FLAG_SPACE;
 	else
-		return false;
-	return true;
+		return 0;
+	return 1;
 }
 
-static bool parse_preci(struct arg *arg, const char *fmt, size_t *i)
+static int parse_preci(struct arg *arg, const char *fmt, size_t *i)
 {
 	size_t start;
 	size_t end;
 
 	if (fmt[*i] != '.')
-		return true;
+		return 1;
 	(*i)++;
 	start = *i;
 	while (fmt[*i] >= '0' && fmt[*i] <= '9')
 		(*i)++;
 	end = *i;
 	if (end == start)
-		return true;
+		return 1;
 	arg->preci = atoin(&fmt[start], end - start);
-	return true;
+	return 1;
 }
 
 static void parse_length(struct arg *arg, const char *fmt, size_t *i)
@@ -280,7 +281,7 @@ static void parse_length(struct arg *arg, const char *fmt, size_t *i)
 	}
 }
 
-static bool parse_width(struct arg *arg, const char *fmt, size_t *i)
+static int parse_width(struct arg *arg, const char *fmt, size_t *i)
 {
 	size_t start;
 	size_t end;
@@ -290,22 +291,22 @@ static bool parse_width(struct arg *arg, const char *fmt, size_t *i)
 		(*i)++;
 	end = *i;
 	if (end == start)
-		return true;
+		return 1;
 	arg->width = atoin(&fmt[start], end - start);
-	return true;
+	return 1;
 }
 
-static bool parse_arg(struct arg *arg, const char *fmt, size_t *i)
+static int parse_arg(struct arg *arg, const char *fmt, size_t *i)
 {
 	while (parse_flags(arg, fmt[*i]))
 		(*i)++;
 	if (!parse_width(arg, fmt, i))
-		return false;
+		return 0;
 	if (!parse_preci(arg, fmt, i))
-		return false;
+		return 0;
 	parse_length(arg, fmt, i);
 	arg->type = fmt[*i];
-	return true;
+	return 1;
 }
 
 static void print_str(struct printf_buf *buf, struct arg *arg, const char *prefix, const char *s)

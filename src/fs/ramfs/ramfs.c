@@ -1,5 +1,7 @@
-#include <fs/vfs.h>
-#include <sys/errno.h>
+#include "fs/vfs.h"
+
+#include <string.h>
+#include <errno.h>
 
 static int root_lookup(struct fs_node *node, const char *name, uint32_t namelen, struct fs_node **child);
 static int root_readdir(struct fs_node *node, struct fs_readdir_ctx *ctx);

@@ -1,6 +1,7 @@
 #include "x86.h"
 
-#include <sys/std.h>
+#include <stdint.h>
+#include <string.h>
 
 struct tss_entry
 {

@@ -3,6 +3,7 @@
 
 #include "arch/arch.h"
 
+#include <sys/std.h>
 #include <stdint.h>
 #include <stddef.h>
 

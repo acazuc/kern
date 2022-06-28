@@ -1,12 +1,11 @@
 #include "ps2.h"
+#include "arch/x86/io.h"
+#include "shell.h"
 
-#include <arch/x86/io.h>
-#include <sys/std.h>
-#include <sys/kbd.h>
 #include <sys/utf8.h>
-#include <shell.h>
-#include <stdbool.h>
+#include <sys/kbd.h>
 #include <stdint.h>
+#include <stdio.h>
 
 /* qwerty scan code set 1 table */
 static const enum kbd_key g_qwerty_table[128] =
@@ -244,9 +243,9 @@ void ps2_interrupt()
 		g_kbd_buffer[g_kbd_buffer_size++] = c;
 		return;
 	}
-	bool release = false;
+	int release = 0;
 	if (c & 0x80)
-		release = true;
+		release = 1;
 	enum kbd_key key;
 	g_kbd_buffer[g_kbd_buffer_size++] = c;
 	if (g_kbd_buffer_size == 1)

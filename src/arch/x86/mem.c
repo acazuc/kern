@@ -1,7 +1,10 @@
 #include "x86.h"
 
-#include <sys/std.h>
 #include <sys/proc.h>
+#include <string.h>
+#include <stdlib.h>
+#include <limits.h>
+#include <stdio.h>
 
 /*
  * virtual memory layout

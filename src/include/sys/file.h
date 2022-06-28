@@ -1,6 +1,8 @@
 #ifndef SYS_FILE_H
 #define SYS_FILE_H
 
+#include <stddef.h>
+
 struct file_op;
 struct fs_node;
 

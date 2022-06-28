@@ -2,7 +2,6 @@
 #define SYS_KBD_H
 
 #include <stdint.h>
-#include <stdbool.h>
 
 enum kbd_key
 {
@@ -144,7 +143,7 @@ struct kbd_key_evt
 {
 	enum kbd_key key;
 	enum kbd_mod mod;
-	bool pressed;
+	int pressed;
 };
 
 struct kbd_char_evt

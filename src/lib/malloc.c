@@ -1,7 +1,9 @@
-#include "std.h"
+#include "arch/arch.h"
 
-#include <arch/arch.h>
-#include <stdbool.h>
+#include <sys/std.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
 
 #define BLOCKS_SIZE ((BLOCKS_COUNT + 31) / 32)
 #define BLOCKS_COUNT 128 /* XXX: per-block type size */
@@ -96,6 +98,7 @@ static struct page *alloc_page(enum block_type type, size_t size)
 		blocks_size = 0;
 	alloc_size = size + sizeof(*page) + blocks_size + PAGE_SIZE - 1;
 	alloc_size -= alloc_size % PAGE_SIZE;
+	/* XXX: create alloc_size var in page, set size = alloc_size - sizeof(*page) */
 	page = vmalloc(alloc_size);
 	if (!page)
 		return NULL;
@@ -107,14 +110,14 @@ static struct page *alloc_page(enum block_type type, size_t size)
 	return page;
 }
 
-static bool is_page_free(struct page *page)
+static int is_page_free(struct page *page)
 {
 	for (size_t i = 0; i < BLOCKS_SIZE; ++i)
 	{
 		if (page->blocks[i])
-			return false;
+			return 0;
 	}
-	return true;
+	return 1;
 }
 
 static void remove_page(struct page *page)
@@ -141,7 +144,7 @@ static void remove_page(struct page *page)
 
 static void check_free_pages(enum block_type type)
 {
-	bool one_free = false;
+	int one_free = 0;
 	for (struct page *lst = g_pages; lst;)
 	{
 		if (lst->type != type || !is_page_free(lst))
@@ -151,7 +154,7 @@ static void check_free_pages(enum block_type type)
 		}
 		if (!one_free)
 		{
-			one_free = true;
+			one_free = 1;
 			lst = lst->next;
 			continue;
 		}
@@ -219,7 +222,7 @@ static void *get_existing_block(enum block_type type)
 	return NULL;
 }
 
-static void *realloc_large(struct page *lst, void *ptr, size_t size)
+static void *realloc_large(struct page *lst, void *ptr, size_t size, uint32_t flags)
 {
 	void *addr;
 	size_t len;
@@ -237,10 +240,12 @@ static void *realloc_large(struct page *lst, void *ptr, size_t size)
 	remove_page(lst);
 	vfree(lst, lst->size);
 	MALLOC_UNLOCK();
+	if (flags & M_ZERO)
+		memset(addr, 0, size);
 	return addr;
 }
 
-static void *realloc_blocky(struct page *lst, void *ptr, size_t size)
+static void *realloc_blocky(struct page *lst, void *ptr, size_t size, uint32_t flags)
 {
 	void *addr;
 	size_t len;
@@ -262,6 +267,8 @@ static void *realloc_blocky(struct page *lst, void *ptr, size_t size)
 	memcpy(addr, ptr, len);
 	free(ptr);
 	MALLOC_UNLOCK();
+	if (flags & M_ZERO)
+		memset(addr, 0, size);
 	return addr;
 }
 
@@ -281,6 +288,8 @@ void *malloc(size_t size, uint32_t flags)
 		if (!addr)
 			return NULL;
 	}
+	if (flags & M_ZERO)
+		memset(addr, 0, size);
 	return addr;
 }
 
@@ -340,7 +349,7 @@ void *realloc(void *ptr, size_t size, uint32_t flags)
 		if (lst->type == BLOCK_LARGE)
 		{
 			if ((uint8_t*)ptr == lst->addr)
-				return realloc_large(lst, ptr, size);
+				return realloc_large(lst, ptr, size, flags);
 			continue;
 		}
 		if ((uint8_t*)ptr >= lst->addr
@@ -348,7 +357,7 @@ void *realloc(void *ptr, size_t size, uint32_t flags)
 		{
 			uint32_t item = ((uint8_t*)ptr - lst->addr) / g_block_sizes[lst->type];
 			if (lst->addr + g_block_sizes[lst->type] * item == ptr)
-				return realloc_blocky(lst, ptr, size);
+				return realloc_blocky(lst, ptr, size, flags);
 			return NULL;
 		}
 	}

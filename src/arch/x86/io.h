@@ -1,5 +1,5 @@
-#ifndef X86_IO_H
-#define X86_IO_H
+#ifndef X86_ASM_H
+#define X86_ASM_H
 
 #include <stdint.h>
 
@@ -31,6 +31,16 @@ static inline void insl(uint16_t port, uint32_t *buffer, uint32_t n)
 {
 	for (uint32_t i = 0; i < n; ++i)
 		buffer[i] = inl(port);
+}
+
+static inline void cli(void)
+{
+	__asm__ volatile ("cli");
+}
+
+static inline void sti(void)
+{
+	__asm__ volatile ("sti");
 }
 
 #endif

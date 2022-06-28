@@ -1,8 +1,9 @@
-#include <sys/std.h>
-#include <sys/errno.h>
+#include "fs/vfs.h"
 #include <sys/file.h>
 #include <sys/proc.h>
-#include <fs/vfs.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <errno.h>
 
 static int sys_exit(int code)
 {

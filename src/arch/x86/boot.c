@@ -1,18 +1,18 @@
+#include "dev/pic/pic.h"
+#include "dev/pit/pit.h"
+#include "dev/vga/vga.h"
+#include "dev/com/com.h"
+#include "dev/ps2/ps2.h"
+#include "dev/ide/ide.h"
+#include "fs/devfs/devfs.h"
+#include "multiboot.h"
 #include "x86.h"
-
-#include <dev/pic/pic.h>
-#include <dev/pit/pit.h>
-#include <dev/vga/vga.h>
-#include <dev/com/com.h>
-#include <dev/ps2/ps2.h>
-#include <dev/ide/ide.h>
-#include <multiboot.h>
-#include <sys/std.h>
-#include <stdbool.h>
-#include <cpuid.h>
-
-
 #include "io.h"
+
+#include <sys/file.h>
+#include <string.h>
+#include <stdio.h>
+#include <cpuid.h>
 
 enum cpuid_feature
 {
@@ -223,13 +223,13 @@ static void print_cpuid(void)
 		apic_id =         (ebx >> 0xC) & 0xFF;
 		printf("brand: %02x, clflush_size: %02x, addressable_ids: %02x, apic_id: %02x\n", brand, clflush_size, addressable_ids, apic_id);
 		printf("features: ");
-		bool first = true;
+		int first = 1;
 		for (size_t i = 0; i < 32; ++i)
 		{
 			if (!(edx & (1 << i)))
 				continue;
 			if (first)
-				first = false;
+				first = 0;
 			else
 				printf(", ");
 			printf("%s", cpuid_feature_edx_str[i]);
@@ -239,7 +239,7 @@ static void print_cpuid(void)
 			if (!(ecx & (1 << i)))
 				continue;
 			if (first)
-				first = false;
+				first = 0;
 			else
 				printf(", ");
 			printf("%s", cpuid_feature_ecx_str[i]);
@@ -265,6 +265,12 @@ static uint32_t mb_get_memory_map_size(struct multiboot_info *mb_info)
 	return 0;
 }
 
+struct file_op vga_fop =
+{
+};
+
+struct fs_cdev *g_vga_cdev;
+
 void boot(struct multiboot_info *mb_info)
 {
 	vga_init();
@@ -286,7 +292,11 @@ void boot(struct multiboot_info *mb_info)
 		panic("can't get 16MB of memory\n");
 	paging_init(0x1000000, mem_size - 0x1000000);
 	*(uint32_t*)(0xFFFFF000) = 0; /* remove identity paging at 0x00000000 */
-	__asm__ volatile ("sti");
+	sti();
+
+	int res = devfs_mkcdev("tty0", 0, 0, 0600, &vga_fop, &g_vga_cdev);
+	if (res)
+		printf("can't create tty0: %s", strerror(res));
 
 
 #if 0
@@ -331,6 +341,7 @@ void x86_panic(uint32_t *esp, const char *file, const char *line, const char *fn
 #endif
 
 infl:
-	__asm__ volatile ("cli;hlt");
+	sti();
+	__asm__ volatile ("hlt");
 	goto infl;
 }

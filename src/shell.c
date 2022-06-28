@@ -1,12 +1,15 @@
 #include "shell.h"
+#include "dev/vga/vga.h"
+#include "dev/pit/pit.h"
+#include "dev/com/com.h"
+#include "arch/arch.h"
 
-#include <dev/vga/vga.h>
-#include <dev/pit/pit.h>
-#include <dev/com/com.h>
-#include <arch/arch.h>
 #include <sys/std.h>
-#include <stdbool.h>
 #include <stddef.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <time.h>
 
 #define INPUT_PREFIX "#> "
 #define INPUT_PREFIX_LEN (sizeof(INPUT_PREFIX) - 1)
@@ -18,8 +21,8 @@ static uint8_t g_row;
 static uint8_t g_col;
 static uint8_t g_color;
 static char g_input[VGA_WIDTH + 1];
-static bool g_input_init;
-static bool g_first_char;
+static int g_input_init;
+static int g_first_char;
 
 static void reset_input(void)
 {
@@ -107,8 +110,8 @@ void shell_input_init()
 		vga_set_char(i, VGA_HEIGHT - 1, INPUT_PREFIX[i], vga_entry_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK));
 	g_input[0] = '\0';
 	g_input_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-	g_input_init = true;
-	g_first_char = true;
+	g_input_init = 1;
+	g_first_char = 1;
 	vga_enable_cursor();
 	vga_set_cursor(g_input_col, g_input_row);
 }
@@ -148,19 +151,19 @@ void shell_putchar(char c)
 
 	if (g_first_char)
 	{
-		g_first_char = false;
+		g_first_char = 0;
 		print_time();
 	}
 
-	//com_putchar(c);
-	//if (c == '\n')
-	//	com_putchar('\r');
+	com_putchar(c);
+	if (c == '\n')
+		com_putchar('\r');
 
 	if (c == '\n')
 	{
 		g_row++;
 		g_col = 0;
-		g_first_char = true;
+		g_first_char = 1;
 		return;
 	}
 

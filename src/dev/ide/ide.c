@@ -1,10 +1,7 @@
 #include "ide.h"
-
-#include <arch/x86/x86.h>
-#include <arch/x86/io.h>
-#include <sys/errno.h>
-#include <sys/std.h>
+#include "arch/x86/io.h"
 #include <stdint.h>
+#include <errno.h>
 
 #define ATA_SR_BSY  0x80 /* busy */
 #define ATA_SR_DRDY 0x40 /* drive ready */
@@ -352,7 +349,7 @@ static int ide_ata_access(uint8_t dir, uint8_t drive, uint32_t lba, uint8_t nums
 			int err = ide_polling(channel, 1);
 			if (err)
 				return err;
-			asm("rep insw" : : "c"(words), "d"(g_channels[channel].base), "D"(buffer));
+			__asm__ volatile ("rep insw" : : "c"(words), "d"(g_channels[channel].base), "D"(buffer));
 			buffer += words * 2;
 		}
 	}
@@ -363,7 +360,7 @@ static int ide_ata_access(uint8_t dir, uint8_t drive, uint32_t lba, uint8_t nums
 			int err = ide_polling(channel, 0);
 			if (err)
 				return err;
-			asm("rep outsw"::"c"(words), "d"(g_channels[channel].base), "S"(buffer));
+			__asm__ volatile ("rep outsw"::"c"(words), "d"(g_channels[channel].base), "S"(buffer));
 			buffer += words * 2;
 		}
 		ide_write(channel, ATA_REG_COMMAND, (char[]){ATA_CMD_CACHE_FLUSH,

@@ -2,7 +2,7 @@
 #define SYS_PROC_H
 
 #include <sys/queue.h>
-#include <sys/std.h>
+#include <sys/types.h>
 
 struct vmm_ctx;
 

@@ -1,7 +1,5 @@
 #include "pit.h"
-
-#include <arch/x86/io.h>
-#include <sys/std.h>
+#include "arch/x86/io.h"
 
 #define DATA0 0x40
 #define DATA1 0x41

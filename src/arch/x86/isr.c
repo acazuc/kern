@@ -1,12 +1,11 @@
+#include "dev/ps2/ps2.h"
+#include "dev/pit/pit.h"
 #include "x86.h"
-
-#include <dev/ps2/ps2.h>
-#include <dev/pit/pit.h>
-#include <sys/errno.h>
-#include <sys/std.h>
-#include <stdint.h>
-
 #include "io.h"
+
+#include <stdint.h>
+#include <stdio.h>
+#include <errno.h>
 
 struct exception_ctx
 {

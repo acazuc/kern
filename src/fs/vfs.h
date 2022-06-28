@@ -1,7 +1,8 @@
 #ifndef VFS_H
 #define VFS_H
 
-#include <sys/std.h>
+#include <sys/types.h>
+#include <stddef.h>
 
 struct fs_sb;
 struct fs_node;

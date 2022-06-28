@@ -1,9 +1,11 @@
-#include <arch/arch.h>
 #include <sys/proc.h>
 #include <sys/file.h>
-#include <sys/std.h>
-#include <fs/vfs.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
 
+#include "arch/arch.h"
+#include "fs/vfs.h"
 #include "shell.h"
 
 static void infl(void)

@@ -1,6 +1,7 @@
 #include "vfs.h"
 
-#include <sys/errno.h>
+#include <string.h>
+#include <errno.h>
 
 extern struct fs_node g_ramfs_root;
 
@@ -37,12 +38,13 @@ int vfs_getnode(struct fs_node *dir, const char *path, struct fs_node **node)
 		next = path + 1;
 	else
 		next = strchrnul(path, '/');
+	size_t pathlen = next - path;
 	while (*next == '/')
 		next++;
 	struct fs_node *child;
 	if (!dir->op->lookup)
 		return ENOTDIR;
-	int ret = dir->op->lookup(dir, path, next - path, &child);
+	int ret = dir->op->lookup(dir, path, pathlen, &child);
 	if (ret)
 		return ret;
 	return vfs_getnode(child, next, node);

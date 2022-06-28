@@ -6,9 +6,23 @@ BOOT_ASM = i686-elf-as
 
 LD = i686-elf-gcc
 
-CFLAGS = -ffreestanding -O2 -Wall -Wextra -fno-builtin -fno-stack-protector -g
+CFLAGS = -std=c99 \
+         -ffreestanding \
+         -O2 \
+         -Wall \
+         -Wextra \
+         -fno-builtin \
+         -fno-stack-protector \
+         -g \
+         -fno-pie \
+         -fno-pic \
+         -nostdinc \
+         -isystem $(INCLUDE_DIR) \
+         -iquote $(SRC_PATH)
 
-LDFLAGS = -ffreestanding -nostdlib -nodefaultlibs
+LDFLAGS = -ffreestanding \
+          -nostdlib \
+          -nodefaultlibs
 
 BIN_NAME = os.bin
 
@@ -17,6 +31,8 @@ ISO_NAME = os.iso
 DISK_FILE = disk.qcow2
 
 LDFILE = src/arch/x86/linker.ld
+
+INCLUDE_DIR = src/include
 
 SRC_NAME = kernel.c \
            shell.c \
@@ -38,9 +54,11 @@ SRC_NAME = kernel.c \
            dev/com/com.c \
            dev/ps2/ps2.c \
            dev/ide/ide.c \
-           sys/string.c \
-           sys/printf.c \
-           sys/malloc.c \
+           lib/string.c \
+           lib/printf.c \
+           lib/malloc.c \
+           lib/ctype.c \
+           lib/stdlib.c \
            fs/vfs.c \
            fs/devfs/devfs.c \
            fs/ramfs/ramfs.c \
@@ -61,7 +79,7 @@ all: odir $(ISO_NAME)
 
 $(OBJ_PATH)/%.c.o: $(SRC_PATH)/%.c
 	@echo "CC $<"
-	@$(CC) -c $< -o $@ -std=gnu99 $(CFLAGS) -I $(SRC_PATH)
+	@$(CC) -c $< -o $@ $(CFLAGS)
 
 $(OBJ_PATH)/%.s.o: $(SRC_PATH)/%.s
 	@echo "ASM $<"
@@ -108,7 +126,7 @@ odir:
 	@mkdir -p $(OBJ_PATH)/dev/com
 	@mkdir -p $(OBJ_PATH)/dev/ps2
 	@mkdir -p $(OBJ_PATH)/dev/ide
-	@mkdir -p $(OBJ_PATH)/sys
+	@mkdir -p $(OBJ_PATH)/lib
 	@mkdir -p $(OBJ_PATH)/fs
 	@mkdir -p $(OBJ_PATH)/fs/devfs
 	@mkdir -p $(OBJ_PATH)/fs/ramfs

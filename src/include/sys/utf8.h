@@ -1,8 +1,8 @@
 #ifndef SYS_UTF8_H
 #define SYS_UTF8_H
 
-#include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 
 #define UTF8_NEXT(s) (*(str++))
 
@@ -29,10 +29,10 @@ static inline uint32_t utf8_decode1(const char *str)
 	return UTF8_NEXT(str);
 }
 
-static inline bool utf8_check1(const char *str)
+static inline int utf8_check1(const char *str)
 {
 	(void)str;
-	return true;
+	return 1;
 }
 
 static inline void utf8_encode2(char *str, uint32_t cp)
@@ -49,13 +49,13 @@ static inline uint32_t utf8_decode2(const char *str)
 	return cp;
 }
 
-static inline bool utf8_check2(const char *str)
+static inline int utf8_check2(const char *str)
 {
 	if ((str[0] & 0x1F) < 2)
-		return false;
+		return 0;
 	if ((str[1] & 0xC0) != 0x80)
-		return false;
-	return true;
+		return 0;
+	return 1;
 }
 
 static inline void utf8_encode3(char *str, uint32_t cp)
@@ -74,15 +74,15 @@ static inline uint32_t utf8_decode3(const char *str)
 	return cp;
 }
 
-static inline bool utf8_check3(const char *str)
+static inline int utf8_check3(const char *str)
 {
 	if (!(str[0] & 0xF) && !(str[1] & 0x20))
-		return false;
+		return 0;
 	if ((str[1] & 0xC0) != 0x80)
-		return false;
+		return 0;
 	if ((str[2] & 0xC0) != 0x80)
-		return false;
-	return true;
+		return 0;
+	return 1;
 }
 
 static inline void utf8_encode4(char *str, uint32_t cp)
@@ -103,253 +103,253 @@ static inline uint32_t utf8_decode4(const char *str)
 	return cp;
 }
 
-static inline bool utf8_check4(const char *str)
+static inline int utf8_check4(const char *str)
 {
 	if (!(str[0] & 0x7) && !(str[1] & 0x30))
-		return false;
+		return 0;
 	if ((str[1] & 0xC0) != 0x80)
-		return false;
+		return 0;
 	if ((str[2] & 0xC0) != 0x80)
-		return false;
+		return 0;
 	if ((str[3] & 0xC0) != 0x80)
-		return false;
-	return true;
+		return 0;
+	return 1;
 }
 
-static inline bool utf8_encode(char **str, uint32_t cp)
+static inline int utf8_encode(char **str, uint32_t cp)
 {
 	if (cp < 0x80)
 	{
 		utf8_encode1(*str, cp);
 		*str += 1;
-		return true;
+		return 1;
 	}
 	else if (cp < 0x800)
 	{
 		utf8_encode2(*str, cp);
 		*str += 2;
-		return true;
+		return 1;
 	}
 	else if (cp < 0x10000)
 	{
 		utf8_encode3(*str, cp);
 		*str += 3;
-		return true;
+		return 1;
 	}
 	else if (cp < 0x10FFFF)
 	{
 		utf8_encode4(*str, cp);
 		*str += 4;
-		return true;
+		return 1;
 	}
-	return false;
+	return 0;
 }
 
-static inline bool utf8_decode(const char **str, uint32_t *cp)
+static inline int utf8_decode(const char **str, uint32_t *cp)
 {
 	switch (utf8_codepoint_length(*str))
 	{
 		case 1:
 			*cp = utf8_decode1(*str);
 			*str += 1;
-			return true;
+			return 1;
 		case 2:
 			*cp = utf8_decode2(*str);
 			*str += 2;
-			return true;
+			return 1;
 		case 3:
 			*cp = utf8_decode3(*str);
 			*str += 3;
-			return true;
+			return 1;
 		case 4:
 			*cp = utf8_decode4(*str);
 			*str += 4;
-			return true;
+			return 1;
 		default:
-			return false;
+			return 0;
 	}
-	return false;
+	return 0;
 }
 
-static inline bool utf8_check(const char **str, const char *end)
+static inline int utf8_check(const char **str, const char *end)
 {
 	switch (utf8_codepoint_length(*str))
 	{
 		case 1:
 			if (end - *str < 1)
-				return false;
+				return 0;
 			return utf8_check1(*str);
 		case 2:
 			if (end - *str < 2)
-				return false;
+				return 0;
 			return utf8_check2(*str);
 		case 3:
 			if (end - *str < 3)
-				return false;
+				return 0;
 			return utf8_check3(*str);
 		case 4:
 			if (end - *str < 4)
-				return false;
+				return 0;
 			return utf8_check4(*str);
 		default:
-			return false;
+			return 0;
 	}
-	return false;
+	return 0;
 }
 
-static inline bool utf8_next(const char **str, const char *end, uint32_t *cp)
+static inline int utf8_next(const char **str, const char *end, uint32_t *cp)
 {
 	switch (utf8_codepoint_length(*str))
 	{
 		case 1:
 			if (end - *str < 1)
-				return false;
+				return 0;
 			if (!utf8_check1(*str))
-				return false;
+				return 0;
 			*cp = utf8_decode1(*str);
 			*str += 1;
-			return true;
+			return 1;
 		case 2:
 			if (end - *str < 2)
-				return false;
+				return 0;
 			if (!utf8_check2(*str))
-				return false;
+				return 0;
 			*cp = utf8_decode2(*str);
 			*str += 2;
-			return true;
+			return 1;
 		case 3:
 			if (end - *str < 3)
-				return false;
+				return 0;
 			if (!utf8_check3(*str))
-				return false;
+				return 0;
 			*cp = utf8_decode3(*str);
 			*str += 3;
-			return true;
+			return 1;
 		case 4:
 			if (end - *str < 4)
-				return false;
+				return 0;
 			if (!utf8_check4(*str))
-				return false;
+				return 0;
 			*cp = utf8_decode4(*str);
 			*str += 4;
-			return true;
+			return 1;
 		default:
-			return false;
+			return 0;
 	}
-	return false;
+	return 0;
 }
 
-static inline bool utf8_peek_next(const char *str, const char *end, uint32_t *cp)
+static inline int utf8_peek_next(const char *str, const char *end, uint32_t *cp)
 {
 	return utf8_next(&str, end, cp);
 }
 
-static inline bool utf8_prev(const char **str, const char *begin, uint32_t *cp)
+static inline int utf8_prev(const char **str, const char *begin, uint32_t *cp)
 {
 	const char *org = *str;
 	for (size_t i = 0; i < 4; ++i)
 	{
 		if (*str - begin < 1)
-			return false;
+			return 0;
 		(*str)--;
 		switch (utf8_codepoint_length(*str))
 		{
 			case 1:
 				if (org - *str != 1)
-					return false;
+					return 0;
 				if (!utf8_check1(*str))
-					return false;
+					return 0;
 				*cp = utf8_decode1(*str);
-				return true;
+				return 1;
 			case 2:
 				if (org - *str != 2)
-					return false;
+					return 0;
 				if (!utf8_check2(*str))
-					return false;
+					return 0;
 				*cp = utf8_decode2(*str);
-				return true;
+				return 1;
 			case 3:
 				if (org - *str != 3)
-					return false;
+					return 0;
 				if (!utf8_check3(*str))
-					return false;
+					return 0;
 				*cp = utf8_decode3(*str);
-				return true;
+				return 1;
 			case 4:
 				if (org - *str != 4)
-					return false;
+					return 0;
 				if (!utf8_check4(*str))
-					return false;
+					return 0;
 				*cp = utf8_decode4(*str);
-				return true;
+				return 1;
 		}
 	}
-	return false;
+	return 0;
 }
 
-static inline bool utf8_peek_prev(const char *str, const char *begin, uint32_t *cp)
+static inline int utf8_peek_prev(const char *str, const char *begin, uint32_t *cp)
 {
 	return utf8_prev(&str, begin, cp);
 }
 
-static inline bool utf8_advance_step(const char **str, const char *end)
+static inline int utf8_advance_step(const char **str, const char *end)
 {
 	switch (utf8_codepoint_length(*str))
 	{
 		case 1:
 			if (end - *str < 1)
-				return false;
+				return 0;
 			if (!utf8_check1(*str))
-				return false;
+				return 0;
 			*str += 1;
-			return true;
+			return 1;
 		case 2:
 			if (end - *str < 2)
-				return false;
+				return 0;
 			if (!utf8_check2(*str))
-				return false;
+				return 0;
 			*str += 2;
-			return true;
+			return 1;
 		case 3:
 			if (end - *str < 3)
-				return false;
+				return 0;
 			if (!utf8_check3(*str))
-				return false;
+				return 0;
 			*str += 3;
-			return true;
+			return 1;
 		case 4:
 			if (end - *str < 4)
-				return false;
+				return 0;
 			if (!utf8_check4(*str))
-				return false;
+				return 0;
 			*str += 4;
-			return true;
+			return 1;
 		default:
-			return false;
+			return 0;
 	}
-	return false;
+	return 0;
 }
 
-static inline bool utf8_advance(const char **str, const char *end, size_t len)
+static inline int utf8_advance(const char **str, const char *end, size_t len)
 {
 	for (size_t i = 0; i < len; ++i)
 	{
 		if (!utf8_advance_step(str, end))
-			return false;
+			return 0;
 	}
-	return true;
+	return 1;
 }
 
-static inline bool utf8_distance(const char *str, const char *end, size_t *distance)
+static inline int utf8_distance(const char *str, const char *end, size_t *distance)
 {
 	*distance = 0;
 	while (str != end)
 	{
 		if (!utf8_advance_step(&str, end))
-			return false;
+			return 0;
 		(*distance)++;
 	}
-	return true;
+	return 1;
 }
 
 static inline const char *utf8_find_invalid(const char *str, const char *end)
@@ -362,7 +362,7 @@ static inline const char *utf8_find_invalid(const char *str, const char *end)
 	return str;
 }
 
-static inline bool utf8_is_valid(const char *str, const char *end)
+static inline int utf8_is_valid(const char *str, const char *end)
 {
 	return utf8_find_invalid(str, end) == end;
 }
