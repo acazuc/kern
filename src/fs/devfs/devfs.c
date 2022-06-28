@@ -42,7 +42,7 @@ struct fs_node g_devfs_root =
 	.ino = 1,
 	.uid = 0,
 	.gid = 0,
-	.mode = 0600,
+	.mode = 0600 | S_IFDIR,
 	.refcount = 0,
 };
 
@@ -64,20 +64,16 @@ static int root_lookup(struct fs_node *dir, const char *name, uint32_t namelen, 
 	if (dir != &g_devfs_root)
 		return ENOENT;
 	if (g_nodes)
-		printf("g_nodes[0]->name: %p\n", g_nodes[0]->name);
 	for (size_t i = 0; i < g_nodes_nb; ++i)
 	{
 		struct devfs_node *node = g_nodes[i];
 		if (!node)
 			continue;
-		printf("strncmp\n");
 		if (!strncmp(node->name, name, namelen))
 		{
-			printf("setting at %p\n", child);
 			*child = node->node;
 			return 0;
 		}
-		printf("nope\n");
 	}
 	return ENOENT;
 }
@@ -91,10 +87,9 @@ static int root_readdir(struct fs_node *node, struct fs_readdir_ctx *ctx)
 
 static int find_ino(struct devfs_node *node)
 {
-	struct devfs_node **nodes = realloc(g_nodes, g_nodes_nb + 1, 0);
+	struct devfs_node **nodes = realloc(g_nodes, sizeof(*nodes) * (g_nodes_nb + 1), 0);
 	if (!nodes)
 		return ENOMEM;
-	printf("realloc nodes\n");
 	g_nodes = nodes;
 	g_nodes[g_nodes_nb] = node;
 	g_nodes_nb++;
@@ -113,7 +108,7 @@ int devfs_mkcdev(const char *name, uid_t uid, gid_t gid, mode_t mode, struct fil
 		/* XXX: decref child */
 		return EEXIST;
 	}
-	struct devfs_node *cnode = NULL;
+	struct devfs_node *devnode = NULL;
 	*cdev = NULL;
 	char *namedup = strdup(name);
 	if (!namedup)
@@ -121,32 +116,26 @@ int devfs_mkcdev(const char *name, uid_t uid, gid_t gid, mode_t mode, struct fil
 		ret = ENOMEM;
 		goto err;
 	}
-	*cdev = malloc(sizeof(*cdev), 0);
+	*cdev = malloc(sizeof(**cdev), 0);
 	if (!*cdev)
 	{
 		ret = ENOMEM;
 		goto err;
 	}
-	cnode = malloc(sizeof(*cnode), M_ZERO);
-	if (!cnode)
+	devnode = malloc(sizeof(*devnode), M_ZERO);
+	if (!devnode)
 	{
 		ret = ENOMEM;
 		goto err;
 	}
-	cnode->name = strdup(name);
-	if (!cnode->name)
-	{
-		ret = ENOMEM;
-		goto err;
-	}
-	printf("cnode name: %p\n", cnode->name);
+	devnode->name = namedup;
 	node = malloc(sizeof(*node), 0);
 	if (!node)
 	{
 		ret = ENOMEM;
 		goto err;
 	}
-	cnode->node = node;
+	devnode->node = node;
 	node->op = &g_node_op;
 	node->fop = file_op;
 	node->sb = &g_sb;
@@ -155,21 +144,16 @@ int devfs_mkcdev(const char *name, uid_t uid, gid_t gid, mode_t mode, struct fil
 	node->gid = gid;
 	node->mode = ((mode) & ~S_IFMT) | S_IFCHR;
 	node->refcount = 1;
-	ret = find_ino(cnode);
+	ret = find_ino(devnode);
 	if (ret)
 		goto err;
 	(*cdev)->node = node;
-	printf("cnode name 2: %p\n", g_nodes[0]->name);
 	return 0;
 
 err:
 	free(namedup);
 	free(*cdev);
-	if (cnode)
-	{
-		free(cnode->name);
-		free(cnode);
-	}
+	free(devnode);
 	free(node);
 	return ret;
 }

@@ -1,5 +1,6 @@
 #include "fs/vfs.h"
 
+#include <sys/stat.h>
 #include <string.h>
 #include <errno.h>
 
@@ -37,7 +38,7 @@ struct fs_node g_ramfs_root =
 	.ino = 1,
 	.uid = 0,
 	.gid = 0,
-	.mode = 0600,
+	.mode = 0600 | S_IFDIR,
 	.refcount = 1,
 };
 
