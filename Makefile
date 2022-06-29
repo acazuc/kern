@@ -54,6 +54,8 @@ SRC_NAME = kernel.c \
            dev/com/com.c \
            dev/ps2/ps2.c \
            dev/ide/ide.c \
+           dev/tty/tty.c \
+           dev/tty/vga.c \
            lib/string.c \
            lib/printf.c \
            lib/malloc.c \
@@ -126,6 +128,7 @@ odir:
 	@mkdir -p $(OBJ_PATH)/dev/com
 	@mkdir -p $(OBJ_PATH)/dev/ps2
 	@mkdir -p $(OBJ_PATH)/dev/ide
+	@mkdir -p $(OBJ_PATH)/dev/tty
 	@mkdir -p $(OBJ_PATH)/lib
 	@mkdir -p $(OBJ_PATH)/fs
 	@mkdir -p $(OBJ_PATH)/fs/devfs

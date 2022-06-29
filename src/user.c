@@ -87,17 +87,95 @@ static int close(int fd)
 	return ret;
 }
 
-#define OUT(s) write(1, s, sizeof(s))
+static size_t strlen(const char *s)
+{
+	size_t i = 0;
+	while (s[i])
+		i++;
+	return i;
+}
+
+static char *strchr(const char *s, int c)
+{
+	while (*s)
+	{
+		if (*s == (char)c)
+			return (char*)s;
+		s++;
+	}
+	if (!(char)c)
+		return (char*)s;
+	return NULL;
+}
+
+static int strcmp(const char *s1, const char *s2)
+{
+	size_t i = 0;
+	while (s1[i] && s2[i] && s1[i] == s2[i])
+		i++;
+	return (((uint8_t*)s1)[i] - ((uint8_t*)s2)[i]);
+}
+
+static void *memchr(const void *s, int c, size_t n)
+{
+	for (size_t i = 0; i < n; ++i)
+	{
+		if (((uint8_t*)s)[i] == (uint8_t)c)
+			return (uint8_t*)s + i;
+	}
+	return NULL;
+}
+
+static void *memcpy(void *d, const void *s, size_t n)
+{
+	for (size_t i = 0; i < n; ++i)
+		((uint8_t*)d)[i] = ((uint8_t*)s)[i];
+	return d;
+}
+
+#define OUT(s) write(-2, s, sizeof(s))
+
+static void exec_line(const char *line)
+{
+	write(0, "cmd: ", 5);
+	write(0, line, strlen(line));
+	write(0, "\n", 1);
+}
 
 void userland()
 {
 	OUT("userland\n");
-	int ret = open("/dev/tty0", O_RDONLY);
-	if (ret < 0)
+	int fd = open("/dev/tty0", O_RDONLY);
+	if (fd < 0)
+	{
 		OUT("failed to open /dev/tty0\n");
-	else if (ret > 0)
-		OUT("ret > 0\n");
-	else
-		OUT("open ok\n");
+		goto loop;
+	}
+	write(fd, "test\n", 5);
+	char buf[78] = "";
+	char line[78];
+	size_t buf_pos = 0;
+	while (1)
+	{
+		char *eol = NULL;
+		do
+		{
+			int rd = read(fd, buf + buf_pos, sizeof(buf) - buf_pos - 1);
+			if (rd < 0)
+			{
+				OUT("rd < 0");
+				continue;
+			}
+			buf_pos += rd;
+			eol = memchr(buf, '\n', buf_pos);
+		} while (!eol);
+		size_t line_len = eol - buf;;
+		memcpy(line, buf, line_len);
+		line[line_len] = '\0';
+		memcpy(buf, eol + 1, buf_pos - line_len + 1);
+		buf_pos -= line_len + 1;
+		exec_line(line);
+	}
+	close(fd);
 loop: goto loop;
 }

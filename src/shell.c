@@ -171,6 +171,12 @@ void shell_putchar(char c)
 	g_col++;
 }
 
+void shell_putdata(const void *d, size_t n)
+{
+	for (size_t i = 0; i < n; ++i)
+		shell_putchar(((char*)d)[i]);
+}
+
 void shell_putstr(const char *s)
 {
 	for (size_t i = 0; s[i]; ++i)

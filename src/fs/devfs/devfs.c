@@ -63,7 +63,6 @@ static int root_lookup(struct fs_node *dir, const char *name, uint32_t namelen, 
 {
 	if (dir != &g_devfs_root)
 		return ENOENT;
-	if (g_nodes)
 	for (size_t i = 0; i < g_nodes_nb; ++i)
 	{
 		struct devfs_node *node = g_nodes[i];

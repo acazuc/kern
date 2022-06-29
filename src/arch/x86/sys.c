@@ -18,21 +18,36 @@ static int sys_fork()
 
 static int sys_read(int fd, void *data, size_t count)
 {
-	(void)fd;
-	(void)data;
-	(void)count;
-	return -ENOSYS;
+	if (fd < 0 || (size_t)fd >= curproc->files_nb)
+		return -EBADF;
+	struct file *file = curproc->files[fd].file;
+	if (!file->op || !file->op->read)
+		return -EINVAL; /* XXX */
+	size_t rd;
+	int res = file->op->read(file, data, count, &rd);
+	if (res)
+		return -res;
+	return rd;
 }
 
 static int sys_write(int fd, const void *data, size_t count)
 {
-	if (fd == 1)
+	if (fd == -2)
 	{
 		for (size_t i = 0; i < count; ++i)
 			printf("%c", ((char*)data)[i]);
-		return 0;
+		return count;
 	}
-	return -ENOSYS;
+	if (fd < 0 || (size_t)fd >= curproc->files_nb)
+		return -EBADF;
+	struct file *file = curproc->files[fd].file;
+	if (!file->op || !file->op->write)
+		return -EINVAL; /* XXX */
+	size_t written;
+	int res = file->op->write(file, data, count, &written);
+	if (res)
+		return -res;
+	return written;
 }
 
 static int sys_open(const char *path, int flags, mode_t mode)
@@ -49,6 +64,7 @@ static int sys_open(const char *path, int flags, mode_t mode)
 		/* XXX: decref node */
 		return -ENOMEM;
 	}
+	file->op = node->fop;
 	file->node = node;
 	struct filedesc *fd = realloc(curproc->files, sizeof(*curproc->files) * (curproc->files_nb + 1), 0);
 	if (!fd)
@@ -60,7 +76,7 @@ static int sys_open(const char *path, int flags, mode_t mode)
 	curproc->files = fd;
 	curproc->files[curproc->files_nb].file = file;
 	curproc->files_nb++;
-	return 0;
+	return curproc->files_nb - 1;
 }
 
 static int sys_close(int fd)

@@ -4,12 +4,13 @@
 #include "dev/com/com.h"
 #include "dev/ps2/ps2.h"
 #include "dev/ide/ide.h"
-#include "fs/devfs/devfs.h"
+#include "dev/tty/tty.h"
 #include "multiboot.h"
 #include "x86.h"
 #include "io.h"
 
 #include <sys/file.h>
+#include <inttypes.h>
 #include <string.h>
 #include <stdio.h>
 #include <cpuid.h>
@@ -265,11 +266,7 @@ static uint32_t mb_get_memory_map_size(struct multiboot_info *mb_info)
 	return 0;
 }
 
-struct file_op vga_fop =
-{
-};
-
-struct fs_cdev *g_vga_cdev;
+static struct tty *ttys[4];
 
 void boot(struct multiboot_info *mb_info)
 {
@@ -292,12 +289,18 @@ void boot(struct multiboot_info *mb_info)
 		panic("can't get 16MB of memory\n");
 	paging_init(0x1000000, mem_size - 0x1000000);
 	*(uint32_t*)(0xFFFFF000) = 0; /* remove identity paging at 0x00000000 */
+
+	for (uint32_t i = 0; i < sizeof(ttys) / sizeof(*ttys); ++i)
+	{
+		char name[16];
+		snprintf(name, sizeof(name), "tty%" PRIu32, i);
+		int res = tty_create_vga(name, &ttys[i]);
+		if (res)
+			printf("can't create %s: %s", name, strerror(res));
+	}
+	curtty = ttys[0];
+
 	sti();
-
-	int res = devfs_mkcdev("tty0", 0, 0, 0600, &vga_fop, &g_vga_cdev);
-	if (res)
-		printf("can't create tty0: %s", strerror(res));
-
 
 #if 0
 	uint8_t buf[512];

@@ -34,6 +34,7 @@ struct fs_node
 	gid_t gid;
 	mode_t mode;
 	uint32_t refcount; /* XXX: to be used */
+	void *userptr;
 };
 
 struct fs_sb_op

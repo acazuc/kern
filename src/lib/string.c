@@ -162,39 +162,39 @@ size_t strlcat(char *d, const char *s, size_t n)
 
 char *strchr(const char *s, int c)
 {
-	size_t i;
-	for (i = 0; s[i]; ++i)
+	while (*s)
 	{
-		if (s[i] == (char)c)
-			return (char*)s + i;
+		if (*s == (char)c)
+			return (char*)s;
+		s++;
 	}
 	if (!(char)c)
-		return (char*)s + i;
+		return (char*)s;
 	return NULL;
 }
 
 char *strchrnul(const char *s, int c)
 {
-	size_t i;
-	for (i = 0; s[i]; ++i)
+	while (*s)
 	{
-		if (s[i] == (char)c)
-			return (char*)s + i;
+		if (*s == (char)c)
+			return (char*)s;
+		s++;
 	}
-	return (char*)s + i;
+	return (char*)s;
 }
 
 char *strrchr(const char *s, int c)
 {
 	char *ret = NULL;
-	size_t i;
-	for (i = 0; s[i]; ++i)
+	while (*s)
 	{
-		if (s[i] == (char)c)
-			ret = (char*)(s + i);
+		if (*s == (char)c)
+			ret = (char*)s;
+		s++;
 	}
 	if (!(char)c)
-		return (char*)s + i;
+		return (char*)s;
 	return ret;
 }
 
