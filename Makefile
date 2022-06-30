@@ -1,12 +1,13 @@
-CC = i686-elf-gcc
+CC = gcc
 
 ASM = nasm -f elf32
 
-BOOT_ASM = i686-elf-as
+BOOT_ASM = as --32
 
-LD = i686-elf-gcc
+LD = gcc
 
 CFLAGS = -std=c99 \
+         -m32 \
          -ffreestanding \
          -O2 \
          -Wall \
@@ -22,7 +23,8 @@ CFLAGS = -std=c99 \
 
 LDFLAGS = -ffreestanding \
           -nostdlib \
-          -nodefaultlibs
+          -nodefaultlibs \
+          -m32
 
 BIN_NAME = os.bin
 
@@ -30,12 +32,11 @@ ISO_NAME = os.iso
 
 DISK_FILE = disk.qcow2
 
-LDFILE = src/arch/x86/linker.ld
+LDFILE = sys/arch/x86/linker.ld
 
-INCLUDE_DIR = src/include
+INCLUDE_DIR = sys/include
 
 SRC_NAME = kernel.c \
-           shell.c \
            user.c \
            user.s \
            arch/x86/boot.S \
@@ -65,7 +66,7 @@ SRC_NAME = kernel.c \
            fs/devfs/devfs.c \
            fs/ramfs/ramfs.c \
 
-SRC_PATH = src
+SRC_PATH = sys
 
 SRC = $(addprefix $(SRC_PATH)/, $(SRC_NAME))
 
