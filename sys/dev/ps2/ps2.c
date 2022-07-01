@@ -142,6 +142,7 @@ static const uint32_t g_scancodes_normal[KBD_KEY_LAST] =
 	[KBD_KEY_SPACE]     = 0x20,
 	[KBD_KEY_ENTER]     = 0x0A,
 	[KBD_KEY_BACKSPACE] = 0x08,
+	[KBD_KEY_DELETE]    = 0x7F,
 	[KBD_KEY_KP_MULT]   = 0x2A,
 	[KBD_KEY_KP_MINUS]  = 0x2D,
 	[KBD_KEY_KP_PLUS]   = 0x2B,

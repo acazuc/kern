@@ -65,4 +65,13 @@ struct stat
 #define st_ctime st_ctim.tv_sec
 };
 
+struct sys_dirent
+{
+	ino_t ino;
+	off_t off;
+	uint16_t reclen;
+	uint8_t type;
+	char name[];
+};
+
 #endif

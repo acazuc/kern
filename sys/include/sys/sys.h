@@ -24,6 +24,8 @@
 
 #define SYS_GETPGID   132
 
+#define SYS_GETDENTS  145
+
 #define SYS_GETUID    199
 #define SYS_GETGID    200
 #define SYS_GETEUID   201

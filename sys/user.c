@@ -99,6 +99,13 @@ static int stat(const char *pathname, struct stat *statbuf)
 	return ret;
 }
 
+static int getdents(int fd, struct sys_dirent *dirp, unsigned count)
+{
+	int32_t ret = syscall(SYS_GETDENTS, fd, (intptr_t)dirp, count, 0, 0, 0);
+	TRANSFORM_ERRNO(ret);
+	return ret;
+}
+
 static size_t strlen(const char *s)
 {
 	size_t i = 0;
@@ -166,6 +173,26 @@ static void exec_line(const char *line)
 			tmp[50] = '0' + i;
 			write(g_fd, tmp, 56);
 		}
+		return;
+	}
+	if (!strcmp(line, "stat"))
+	{
+		struct stat st;
+		int res = stat("/dev/tty0", &st);
+		if (res)
+		{
+			write(g_fd, "can't stat\n", 11);
+			return;
+		}
+		char str[] = "mode: 000\n";
+		str[6] = '0' + ((st.st_mode >> 6) & 0x7);
+		str[7] = '0' + ((st.st_mode >> 3) & 0x7);
+		str[8] = '0' + ((st.st_mode >> 0) & 0x7);
+		write(g_fd, str, 10);
+		return;
+	}
+	if (!strcmp(line, "ls"))
+	{
 		return;
 	}
 	write(-2, "unknown command: ", 17);

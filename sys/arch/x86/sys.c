@@ -331,6 +331,14 @@ static int sys_stat(const char *pathname, struct stat *statbuf)
 	return 0;
 }
 
+static int sys_getdents(int fd, struct sys_dirent *dirp, unsigned count)
+{
+	if (!verify_userdata(dirp, count))
+		return -EFAULT;
+	/* XXX */
+	return 0;
+};
+
 static int (*g_syscalls[])() =
 {
 	[SYS_EXIT]      = sys_exit,
@@ -362,6 +370,7 @@ static int (*g_syscalls[])() =
 	[SYS_GETPGID]   = sys_getpgid,
 	[SYS_IOCTL]     = sys_ioctl,
 	[SYS_STAT]      = sys_stat,
+	[SYS_GETDENTS]  = sys_getdents,
 };
 
 uint32_t call_sys(uint32_t *args)
