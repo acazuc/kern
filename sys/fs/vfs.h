@@ -3,6 +3,7 @@
 
 #include <sys/types.h>
 #include <stddef.h>
+#include <time.h>
 
 struct fs_sb;
 struct fs_node;
@@ -21,6 +22,7 @@ struct fs_sb
 {
 	const struct fs_sb_op *op;
 	struct fs_type *type;
+	dev_t dev;
 };
 
 struct fs_node
@@ -29,10 +31,18 @@ struct fs_node
 	const struct file_op *fop;
 	struct fs_node *parent;
 	struct fs_sb *sb;
+	struct timespec atime;
+	struct timespec mtime;
+	struct timespec ctime;
+	blksize_t blksize;
+	blkcnt_t blocks;
+	nlink_t nlink;
+	dev_t rdev;
 	ino_t ino;
 	uid_t uid;
 	gid_t gid;
 	mode_t mode;
+	off_t size;
 	uint32_t refcount; /* XXX: to be used */
 	void *userptr;
 };
@@ -59,5 +69,6 @@ struct fs_node_op
 };
 
 int vfs_getnode(struct fs_node *dir, const char *path, struct fs_node **node);
+void fs_node_decref(struct fs_node *node);
 
 #endif

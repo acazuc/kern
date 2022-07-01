@@ -14,7 +14,7 @@ struct file
 
 struct file_op
 {
-	int (*open)(struct file *file);
+	int (*open)(struct file *file, struct fs_node *node);
 	int (*close)(struct file *file);
 	int (*write)(struct file *file, const void *data, size_t count);
 	int (*read)(struct file *file, void *data, size_t count);

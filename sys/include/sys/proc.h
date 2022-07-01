@@ -15,7 +15,7 @@ struct proc
 	struct filedesc *files;
 	uint32_t files_nb;
 	struct fs_node *root;
-	struct fs_node *dir;
+	struct fs_node *cwd;
 	pid_t ppid;
 	pid_t pid;
 	pid_t pgid;

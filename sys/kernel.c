@@ -30,6 +30,8 @@ static struct thread *proc_create_user(void *entry)
 	if (!thread)
 		panic("can't alloc thread\n");
 	thread->proc = proc;
+	proc->root = &g_ramfs_root;
+	proc->cwd = proc->root;
 	proc->files = NULL;
 	proc->files_nb = 0;
 	proc->vmm_ctx = create_vmm_ctx();

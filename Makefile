@@ -2,7 +2,7 @@ CC = gcc
 
 ASM = nasm -f elf32
 
-BOOT_ASM = as --32
+AS = as --32
 
 LD = gcc
 
@@ -94,11 +94,11 @@ $(OBJ_PATH)/%.s.o: $(SRC_PATH)/%.s
 	@$(ASM) $< -o $@
 
 $(OBJ_PATH)/%.S.o: $(SRC_PATH)/%.S
-	@echo "ASM $<"
-	@$(BOOT_ASM) $< -o $@
+	@echo "AS $<"
+	@$(AS) $< -o $@
 
 $(BIN):
-	@make -I mk -C $(BIN)
+	@make MKDIR=$(PWD)/mk -C $(BIN)
 
 $(LIB):
 	@make -I mk -C $(LIB)
@@ -106,7 +106,7 @@ $(LIB):
 $(LDFILE):
 
 $(BIN_NAME): $(OBJ) $(LDFILE)
-	@echo "LD $<"
+	@echo "LD $@"
 	@$(LD) -T $(LDFILE) -o $@ $(LDFLAGS) $(OBJ) -lgcc
 
 $(ISO_NAME): $(BIN_NAME)

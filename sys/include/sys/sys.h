@@ -10,6 +10,8 @@
 
 #define SYS_TIME      13
 
+#define SYS_STAT      18
+
 #define SYS_GETPID    20
 
 #define SYS_IOCTL     54

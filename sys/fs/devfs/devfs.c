@@ -43,7 +43,7 @@ struct fs_node g_devfs_root =
 	.uid = 0,
 	.gid = 0,
 	.mode = 0600 | S_IFDIR,
-	.refcount = 0,
+	.refcount = 1,
 };
 
 static struct fs_node_op g_node_op =
@@ -104,7 +104,7 @@ int devfs_mkcdev(const char *name, uid_t uid, gid_t gid, mode_t mode, struct fil
 	struct fs_node *node;
 	if (!root_lookup(&g_devfs_root, name, strlen(name), &node))
 	{
-		/* XXX: decref child */
+		fs_node_decref(node);
 		return EEXIST;
 	}
 	struct devfs_node *devnode = NULL;

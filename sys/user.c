@@ -1,8 +1,11 @@
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/sys.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <stdarg.h>
 #include <errno.h>
+#include <time.h>
 
 typedef uint32_t mode_t;
 
@@ -85,6 +88,13 @@ static int open(const char *path, int flags, ...)
 static int close(int fd)
 {
 	int32_t ret = syscall(SYS_CLOSE, fd, 0, 0, 0, 0, 0);
+	TRANSFORM_ERRNO(ret);
+	return ret;
+}
+
+static int stat(const char *pathname, struct stat *statbuf)
+{
+	int32_t ret = syscall(SYS_STAT, (intptr_t)pathname, (intptr_t)statbuf, 0, 0, 0, 0);
 	TRANSFORM_ERRNO(ret);
 	return ret;
 }

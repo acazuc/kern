@@ -2,6 +2,7 @@
 #include "dev/pit/pit.h"
 #include <sys/file.h>
 #include <sys/proc.h>
+#include <sys/stat.h>
 #include <sys/sys.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -75,16 +76,22 @@ static int sys_open(const char *path, int flags, mode_t mode)
 	struct file *file = malloc(sizeof(*file), 0);
 	if (file == NULL)
 	{
-		/* XXX: decref node */
+		fs_node_decref(node);
 		return -ENOMEM;
+	}
+	ret = node->fop->open(file, node);
+	if (ret)
+	{
+		fs_node_decref(node);
+		return -ret;
 	}
 	file->op = node->fop;
 	file->node = node;
 	struct filedesc *fd = realloc(curproc->files, sizeof(*curproc->files) * (curproc->files_nb + 1), 0);
 	if (!fd)
 	{
-		/* XXX: decref node */
-		free(file);
+		file->op->close(file);
+		free(file); /* XXX: deref */
 		return -ENOMEM;
 	}
 	curproc->files = fd;
@@ -97,6 +104,11 @@ static int sys_close(int fd)
 {
 	if (fd < 0 || (unsigned)fd >= curproc->files_nb)
 		return -EBADF;
+	struct file *file = curproc->files[fd].file;
+	if (!file)
+		return -EBADF;
+	file->op->close(file);
+	free(file); /* XXX: decref */
 	return -ENOSYS;
 }
 
@@ -294,6 +306,31 @@ static int sys_ioctl(int fd, unsigned long req, intptr_t data)
 	return file->op->ioctl(file, req, data);
 }
 
+static int sys_stat(const char *pathname, struct stat *statbuf)
+{
+	if (!verify_userstr(pathname) || !verify_userdata(statbuf, sizeof(*statbuf)))
+		return -EFAULT;
+	struct fs_node *node;
+	int ret = vfs_getnode(NULL, pathname, &node);
+	if (ret)
+		return -ret;
+	statbuf->st_dev = node->sb->dev;
+	statbuf->st_ino = node->ino;
+	statbuf->st_mode = node->mode;
+	statbuf->st_nlink = node->nlink;
+	statbuf->st_uid = node->uid;
+	statbuf->st_gid = node->gid;
+	statbuf->st_rdev = node->rdev;
+	statbuf->st_size = node->size;
+	statbuf->st_blksize = node->blksize;
+	statbuf->st_blocks = node->blocks;
+	statbuf->st_atim = node->atime;
+	statbuf->st_mtim = node->mtime;
+	statbuf->st_ctim = node->ctime;
+	fs_node_decref(node);
+	return 0;
+}
+
 static int (*g_syscalls[])() =
 {
 	[SYS_EXIT]      = sys_exit,
@@ -324,6 +361,7 @@ static int (*g_syscalls[])() =
 	[SYS_GETRESGID] = sys_getresgid,
 	[SYS_GETPGID]   = sys_getpgid,
 	[SYS_IOCTL]     = sys_ioctl,
+	[SYS_STAT]      = sys_stat,
 };
 
 uint32_t call_sys(uint32_t *args)

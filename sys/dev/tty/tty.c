@@ -10,18 +10,19 @@ struct tty *curtty;
 
 static int write_char(struct tty *tty, uint8_t c);
 
-int tty_fopen(struct file *file)
+int tty_fopen(struct file *file, struct fs_node *node)
 {
 	/* XXX */
 	(void)file;
-	return EINVAL;
+	(void)node;
+	return 0;
 }
 
 int tty_fclose(struct file *file)
 {
 	/* XXX */
 	(void)file;
-	return EINVAL;
+	return 0;
 }
 
 int tty_fwrite(struct file *file, const void *data, size_t count)
