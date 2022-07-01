@@ -5,10 +5,11 @@
 #include "dev/ps2/ps2.h"
 #include "dev/ide/ide.h"
 #include "dev/tty/tty.h"
-#include "multiboot.h"
+#include "dev/pci/pci.h"
 #include "x86.h"
 #include "io.h"
 
+#include <multiboot.h>
 #include <sys/file.h>
 #include <inttypes.h>
 #include <string.h>
@@ -299,6 +300,7 @@ void boot(struct multiboot_info *mb_info)
 			printf("can't create %s: %s", name, strerror(res));
 	}
 	curtty = ttys[0];
+	pci_init();
 
 	sti();
 

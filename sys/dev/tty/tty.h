@@ -1,8 +1,12 @@
 #ifndef DEV_TTY_H
 #define DEV_TTY_H
 
+#include <termios.h>
 #include <stdint.h>
 #include <stddef.h>
+
+#define TTY_STOPPED (1 << 0)
+#define TTY_EOF     (1 << 1)
 
 struct fs_cdev;
 struct tty_op;
@@ -10,13 +14,17 @@ struct tty_op;
 struct tty
 {
 	struct fs_cdev *cdev;
+	struct termios termios;
 	struct tty_op *op;
 	uint8_t args[8]; /* escape codes args; XXX: resize ? */
 	uint8_t args_nb;
-	char wbuf[256]; /* XXX: less than 256 ? */
-	char rbuf[256]; /* XXX: resize ? */
+	uint8_t wbuf[256]; /* XXX: less than 256 ? */
+	uint8_t rbuf[4096]; /* XXX: resize ? */
+	uint8_t line[4096]; /* for ICANON */
+	uint32_t flags;
 	size_t wbuf_size;
 	size_t rbuf_size;
+	size_t line_size;
 	size_t ctrl_state;
 	void *userptr;
 };
@@ -65,28 +73,30 @@ enum tty_ctrl
 	TTY_CTRL_GBG24, /* graph background color 24 bits */
 	TTY_CTRL_GFG256, /* graph foreground color 256 */
 	TTY_CTRL_GBG256, /* graph background color 256 */
-	TTY_SCREEN_40X25_MONO,
-	TTY_SCREEN_40X25_COLOR,
-	TTY_SCREEN_80X25_MONO,
-	TTY_SCREEN_80X25_COLOR,
-	TTY_SCREEN_320X200_4COL,
-	TTY_SCREEN_320X200_MONO,
-	TTY_SCREEN_640X200_MONO,
-	TTY_SCREEN_LINEWRAP,
-	TTY_SCREEN_320X200_COLOR,
-	TTY_SCREEN_640X200_COLOR16,
-	TTY_SCREEN_640X350_MONO2,
-	TTY_SCREEN_640X350_COLOR16,
-	TTY_SCREEN_640X480_MONO2,
-	TTY_SCREEN_640X480_COLOR16,
-	TTY_SCREEN_320X200_COLOR256,
-	TTY_SCREEN_RESET,
-	TTY_PRIV_CURINV,
-	TTY_PRIV_CURVIS,
-	TTY_PRIV_RESSCREEN,
-	TTY_PRIV_SAVESCREEN,
-	TTY_PRIV_ENAALTBUF,
-	TTY_PRIV_DISALTBUF,
+	TTY_CTRL_GFGB, /* graph foreground bright */
+	TTY_CTRL_GBGB, /* graph background bright */
+	TTY_CTRL_S0, /* 40x25 monochrome text */
+	TTY_CTRL_S1, /* 40x25 color text */
+	TTY_CTRL_S2, /* 80x25 monochrome text */
+	TTY_CTRL_S3, /* 80x25 color text */
+	TTY_CTRL_S4, /* 320x200x4 bitmap */
+	TTY_CTRL_S5, /* 320x200x1 bitmap */
+	TTY_CTRL_S6, /* 640x200x1 bitmap */
+	TTY_CTRL_SLW, /* enable line wrap */
+	TTY_CTRL_S13, /* 320x200x24 bitmap */
+	TTY_CTRL_S14, /* 640x200x4 bitmap */
+	TTY_CTRL_S15, /* 640x350x1 bitmap */
+	TTY_CTRL_S16, /* 640x350x4 bitmap */
+	TTY_CTRL_S17, /* 640x480x2 bitmap */
+	TTY_CTRL_S18, /* 640x480x4 bitmap */
+	TTY_CTRL_S19, /* 320x200x8 bitmap */
+	TTY_CTRL_SR, /* screen reset */
+	TTY_CTRL_PCD, /* cursor disable */
+	TTY_CTRL_PCE, /* cursor enable */
+	TTY_CTRL_PSR, /* screen restore */
+	TTY_CTRL_PSS, /* screen save */
+	TTY_CTRL_PABE, /* alternative buffer enable */
+	TTY_CTRL_PABD, /* alternative buffer disable */
 };
 
 struct tty_op

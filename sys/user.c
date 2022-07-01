@@ -137,52 +137,57 @@ static void *memcpy(void *d, const void *s, size_t n)
 
 #define OUT(s) write(-2, s, sizeof(s))
 
+static int g_fd;
+
 static void exec_line(const char *line)
 {
-	write(0, "cmd: ", 5);
-	write(0, line, strlen(line));
-	write(0, "\n", 1);
+	if (!strcmp(line, "colors"))
+	{
+		for (size_t i = 0; i < 10; ++i)
+		{
+			char tmp[128] = "\e[0;30m0;30 \e[1;30m1;30 \e[0;40m0;40\e[0m \e[1;40m1;40\e[0m\n";
+			tmp[5]  = '0' + i;
+			tmp[10] = '0' + i;
+			tmp[17] = '0' + i;
+			tmp[22] = '0' + i;
+			tmp[29] = '0' + i;
+			tmp[34] = '0' + i;
+			tmp[45] = '0' + i;
+			tmp[50] = '0' + i;
+			write(g_fd, tmp, 56);
+		}
+		return;
+	}
+	write(-2, "unknown command: ", 17);
+	write(-2, line, strlen(line));
+	write(-2, "\n", 1);
 }
 
 void userland()
 {
 	OUT("userland\n");
-	int fd = open("/dev/tty0", O_RDONLY);
-	if (fd < 0)
+	g_fd = open("/dev/tty0", O_RDONLY);
+	if (g_fd < 0)
 	{
 		OUT("failed to open /dev/tty0\n");
 		goto loop;
-	}
-	for (size_t i = 0; i < 10; ++i)
-	{
-		char tmp[128] = "\e[0;30m0;30 \e[1;30m1;30 \e[0;40m0;40\e[0m \e[1;40m1;40\e[0m\n";
-		tmp[5]  = '0' + i;
-		tmp[10] = '0' + i;
-		tmp[17] = '0' + i;
-		tmp[22] = '0' + i;
-		tmp[29] = '0' + i;
-		tmp[34] = '0' + i;
-		tmp[45] = '0' + i;
-		tmp[50] = '0' + i;
-		write(fd, tmp, 56);
 	}
 	char buf[78] = "";
 	char line[78];
 	size_t buf_pos = 0;
 	while (1)
 	{
-		write(fd, "\e[0m$ ", 6);
+		write(g_fd, "\e[0m$ ", 6);
 		char *eol = NULL;
 		do
 		{
-			int rd = read(fd, buf + buf_pos, sizeof(buf) - buf_pos - 1);
+			int rd = read(g_fd, buf + buf_pos, sizeof(buf) - buf_pos - 1);
 			if (rd < 0)
 			{
 				if (errno != EAGAIN)
 					OUT("rd < 0");
 				continue;
 			}
-			write(fd, buf + buf_pos, rd);
 			buf_pos += rd;
 			eol = memchr(buf, '\n', buf_pos);
 		} while (!eol);
@@ -193,6 +198,6 @@ void userland()
 		buf_pos -= line_len + 1;
 		exec_line(line);
 	}
-	close(fd);
+	close(g_fd);
 loop: goto loop;
 }

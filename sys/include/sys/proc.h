@@ -5,6 +5,8 @@
 #include <sys/types.h>
 
 struct vmm_ctx;
+struct fs_node;
+struct filedesc;
 
 struct proc
 {
@@ -12,6 +14,8 @@ struct proc
 	void *entrypoint;
 	struct filedesc *files;
 	uint32_t files_nb;
+	struct fs_node *root;
+	struct fs_node *dir;
 	pid_t ppid;
 	pid_t pid;
 	pid_t pgid;

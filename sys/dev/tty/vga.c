@@ -2,70 +2,21 @@
 #include "dev/vga/vga.h"
 
 #include <inttypes.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
 
-/* XXX: remove static global */
-static uint8_t g_row;
-static uint8_t g_col;
-static uint8_t g_color = VGA_COLOR_LIGHT_GREY | (VGA_COLOR_BLACK << 4);
-
-static int vga_tty_read(struct tty *tty, void *data, size_t len)
+struct vga_tty
 {
-	/* XXX */
-	(void)tty;
-	(void)data;
-	(void)len;
-	return -EAGAIN;
-}
+	uint8_t row;
+	uint8_t column;
+	uint8_t color;
+	uint8_t fg_color;
+	uint8_t bg_color;
+	uint8_t bold;
+};
 
-static void scroll_up(void)
-{
-	for (size_t y = 1; y < VGA_HEIGHT - 1; ++y)
-	{
-		for (size_t x = 0; x < VGA_WIDTH; ++x)
-			vga_set_val(x, y - 1, vga_get_val(x, y));
-	}
-	for (size_t x = 0; x < VGA_WIDTH; ++x)
-		vga_set_val(x, VGA_HEIGHT - 2, 0);
-}
-
-static void putchar(char c)
-{
-	if (g_row == VGA_HEIGHT - 1)
-	{
-		scroll_up();
-		g_row--;
-		g_col = 0;
-	}
-
-	if (g_col == VGA_WIDTH - 1)
-	{
-		scroll_up();
-		g_col = 0;
-	}
-
-	if (c == '\n')
-	{
-		g_row++;
-		g_col = 0;
-		return;
-	}
-
-	vga_set_char(g_col, g_row, c, g_color);
-	g_col++;
-}
-
-static int vga_tty_write(struct tty *tty, const void *data, size_t len)
-{
-	/* XXX */
-	(void)tty;
-	for (size_t i = 0; i < len; ++i)
-		putchar(((char*)data)[i]);
-	return len;
-}
-
-static uint8_t g_fg_colors[] =
+static const uint8_t g_fg_colors[] =
 {
 	VGA_COLOR_BLACK,
 	VGA_COLOR_RED,
@@ -89,7 +40,7 @@ static uint8_t g_fg_colors[] =
 	VGA_COLOR_WHITE
 };
 
-static uint8_t g_bg_colors[] =
+static const uint8_t g_bg_colors[] =
 {
 	VGA_COLOR_BLACK,
 	VGA_COLOR_RED,
@@ -113,19 +64,106 @@ static uint8_t g_bg_colors[] =
 	VGA_COLOR_BLACK
 };
 
-/* XXX: remove static global */
-static uint8_t g_fg_color = 9;
-static uint8_t g_bg_color = 9;
-static uint8_t g_bold;
-
-static void update_color(void)
+static int vga_tty_read(struct tty *tty, void *data, size_t len)
 {
-	g_color = (g_bg_colors[g_bg_color] << 4) | g_fg_colors[g_fg_color + g_bold * 10];
+	/* XXX */
+	(void)tty;
+	(void)data;
+	(void)len;
+	return -EAGAIN;
+}
+
+static void scroll_up(void)
+{
+	for (size_t y = 1; y < VGA_HEIGHT; ++y)
+	{
+		for (size_t x = 0; x < VGA_WIDTH; ++x)
+			vga_set_val(x, y - 1, vga_get_val(x, y));
+	}
+	for (size_t x = 0; x < VGA_WIDTH; ++x)
+		vga_set_val(x, VGA_HEIGHT - 1, 0);
+}
+
+static void putchar(struct vga_tty *vga_tty, char c)
+{
+	if (c == 0x7F)
+	{
+		if (vga_tty->column == 0)
+		{
+			vga_tty->column = VGA_WIDTH - 1;
+			if (vga_tty->row)
+				vga_tty->row--;
+		}
+		else
+		{
+			vga_tty->column--;
+		}
+		vga_set_cursor(vga_tty->column, vga_tty->row);
+		vga_set_char(vga_tty->column, vga_tty->row, ' ', vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+		return;
+	}
+
+	if (c == '\b')
+	{
+		if (vga_tty->column == 0)
+		{
+			vga_tty->column = VGA_WIDTH - 1;
+			if (vga_tty->row)
+				vga_tty->row--;
+		}
+		else
+		{
+			vga_tty->column--;
+		}
+		vga_set_cursor(vga_tty->column, vga_tty->row);
+		return;
+	}
+
+	if (c == '\n')
+	{
+		if (vga_tty->row == VGA_HEIGHT - 1)
+			scroll_up();
+		else
+			vga_tty->row++;
+		vga_tty->column = 0;
+		vga_set_cursor(vga_tty->column, vga_tty->row);
+		vga_set_char(vga_tty->column, vga_tty->row, ' ', vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+		return;
+	}
+
+	vga_set_char(vga_tty->column, vga_tty->row, c, vga_tty->color);
+	vga_tty->column++;
+
+	if (vga_tty->column == VGA_WIDTH)
+	{
+		if (vga_tty->row == VGA_HEIGHT - 1)
+			scroll_up();
+		else
+			vga_tty->row++;
+		vga_tty->column = 0;
+	}
+
+	vga_set_cursor(vga_tty->column, vga_tty->row);
+	vga_set_char(vga_tty->column, vga_tty->row, ' ', vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+}
+
+static int vga_tty_write(struct tty *tty, const void *data, size_t len)
+{
+	struct vga_tty *vga_tty = tty->userptr;
+	for (size_t i = 0; i < len; ++i)
+		putchar(vga_tty, ((char*)data)[i]);
+	return len;
+}
+
+static void update_color(struct vga_tty *vga_tty)
+{
+	vga_tty->color = (g_bg_colors[vga_tty->bg_color] << 4)
+	                | g_fg_colors[vga_tty->fg_color + vga_tty->bold * 10];
 }
 
 static int vga_tty_ctrl(struct tty *tty, enum tty_ctrl ctrl, uint32_t val)
 {
-	(void)tty; /* XXX */
+	struct vga_tty *vga_tty = tty->userptr;
 	switch (ctrl)
 	{
 		case TTY_CTRL_CM:
@@ -136,26 +174,32 @@ static int vga_tty_ctrl(struct tty *tty, enum tty_ctrl ctrl, uint32_t val)
 			break;
 		}
 		case TTY_CTRL_GC:
-			g_bold = 0;
-			g_fg_color = 9;
-			g_bg_color = 9;
-			update_color();
+			vga_tty->bold = 0;
+			vga_tty->fg_color = 9;
+			vga_tty->bg_color = 9;
+			update_color(vga_tty);
 			break;
 		case TTY_CTRL_GFG:
-			g_fg_color = val;
-			update_color();
+			vga_tty->fg_color = val;
+			update_color(vga_tty);
 			break;
 		case TTY_CTRL_GBG:
-			g_bg_color = val;
-			update_color();
+			vga_tty->bg_color = val;
+			update_color(vga_tty);
 			break;
 		case TTY_CTRL_GB:
-			g_bold = 1;
-			update_color();
+			vga_tty->bold = 1;
+			update_color(vga_tty);
 			break;
 		case TTY_CTRL_GRB:
-			g_bold = 0;
-			update_color();
+			vga_tty->bold = 0;
+			update_color(vga_tty);
+			break;
+		case TTY_CTRL_PCD:
+			vga_disable_cursor(); /* only if current tty */
+			break;
+		case TTY_CTRL_PCE:
+			vga_enable_cursor(); /* only if current tty */
 			break;
 		default:
 			break;
@@ -172,5 +216,14 @@ static struct tty_op g_tty_vga_op =
 
 int tty_create_vga(const char *name, struct tty **tty)
 {
-	return tty_create(name, &g_tty_vga_op, tty);
+	struct vga_tty *vga_tty = malloc(sizeof(*vga_tty), M_ZERO);
+	if (!vga_tty)
+		return ENOMEM;
+	vga_tty->fg_color = 7;
+	update_color(vga_tty);
+	int res = tty_create(name, &g_tty_vga_op, tty);
+	if (res)
+		return res;
+	(*tty)->userptr = vga_tty;
+	return 0;
 }

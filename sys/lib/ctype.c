@@ -25,7 +25,7 @@ int isdigit(int c)
 
 int isgraph(int c)
 {
-	return c >= ' ' && c <= '~';
+	return c > ' ' && c <= '~';
 }
 
 int islower(int c)
@@ -35,7 +35,7 @@ int islower(int c)
 
 int isprint(int c)
 {
-	return c >= 32 && c <= 126;
+	return c >= ' ' && c <= '~';
 }
 
 int ispunct(int c)

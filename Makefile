@@ -34,6 +34,10 @@ DISK_FILE = disk.qcow2
 
 LDFILE = sys/arch/x86/linker.ld
 
+BIN = bin
+
+LIB = lib
+
 INCLUDE_DIR = sys/include
 
 SRC_NAME = kernel.c \
@@ -57,6 +61,7 @@ SRC_NAME = kernel.c \
            dev/ide/ide.c \
            dev/tty/tty.c \
            dev/tty/vga.c \
+           dev/pci/pci.c \
            lib/string.c \
            lib/printf.c \
            lib/malloc.c \
@@ -92,6 +97,12 @@ $(OBJ_PATH)/%.S.o: $(SRC_PATH)/%.S
 	@echo "ASM $<"
 	@$(BOOT_ASM) $< -o $@
 
+$(BIN):
+	@make -I mk -C $(BIN)
+
+$(LIB):
+	@make -I mk -C $(LIB)
+
 $(LDFILE):
 
 $(BIN_NAME): $(OBJ) $(LDFILE)
@@ -112,10 +123,15 @@ $(DISK_FILE):
 	@sudo qemu-nbd --disconnect /dev/nbd0
 
 run: all $(DISK_FILE)
-	@qemu-system-i386 -m 1024 -soundhw pcspk \
+	@qemu-system-i386 \
+	-m 1024 \
+	-soundhw pcspk \
 	-device piix3-ide,id=ide \
 	-drive id=disk,file=$(DISK_FILE),format=qcow2,if=none \
 	-device ide-hd,drive=disk,bus=ide.0 \
+	-device qemu-xhci,id=xhci \
+	-device usb-ehci,id=ehci \
+	-nic user,model=e1000 \
 	-kernel $(BIN_NAME)
 
 odir:
@@ -130,6 +146,7 @@ odir:
 	@mkdir -p $(OBJ_PATH)/dev/ps2
 	@mkdir -p $(OBJ_PATH)/dev/ide
 	@mkdir -p $(OBJ_PATH)/dev/tty
+	@mkdir -p $(OBJ_PATH)/dev/pci
 	@mkdir -p $(OBJ_PATH)/lib
 	@mkdir -p $(OBJ_PATH)/fs
 	@mkdir -p $(OBJ_PATH)/fs/devfs
@@ -140,4 +157,4 @@ clean:
 	@rm -f $(BIN_NAME)
 	@rm -f $(ISO_NAME)
 
-.PHONY: odir all clean run
+.PHONY: odir all clean run bin lib

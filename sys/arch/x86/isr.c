@@ -1,5 +1,3 @@
-#include "dev/ps2/ps2.h"
-#include "dev/pit/pit.h"
 #include "x86.h"
 #include "io.h"
 
