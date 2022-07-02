@@ -1,6 +1,7 @@
 #ifndef DEV_TTY_H
 #define DEV_TTY_H
 
+#include <sys/types.h>
 #include <termios.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -106,8 +107,8 @@ struct tty_op
 	int (*ctrl)(struct tty *tty, enum tty_ctrl ctrl, uint32_t val);
 };
 
-int tty_create(const char *name, struct tty_op *op, struct tty **tty);
-int tty_create_vga(const char *name, struct tty **tty);
+int tty_create(const char *name, dev_t rdev, struct tty_op *op, struct tty **tty);
+int tty_create_vga(const char *name, int id, struct tty **tty);
 int tty_input(struct tty *tty, const void *data, size_t count);
 int tty_write(struct tty *tty, const void *data, size_t count);
 

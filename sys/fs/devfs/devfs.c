@@ -96,7 +96,7 @@ static int find_ino(struct devfs_node *node)
 	return 0;
 }
 
-int devfs_mkcdev(const char *name, uid_t uid, gid_t gid, mode_t mode, struct file_op *file_op, struct fs_cdev **cdev)
+int devfs_mkcdev(const char *name, uid_t uid, gid_t gid, mode_t mode, dev_t rdev, struct file_op *file_op, struct fs_cdev **cdev)
 {
 	if (!cdev)
 		return EINVAL;
@@ -128,7 +128,7 @@ int devfs_mkcdev(const char *name, uid_t uid, gid_t gid, mode_t mode, struct fil
 		goto err;
 	}
 	devnode->name = namedup;
-	node = malloc(sizeof(*node), 0);
+	node = malloc(sizeof(*node), M_ZERO);
 	if (!node)
 	{
 		ret = ENOMEM;
@@ -142,6 +142,7 @@ int devfs_mkcdev(const char *name, uid_t uid, gid_t gid, mode_t mode, struct fil
 	node->uid = uid;
 	node->gid = gid;
 	node->mode = ((mode) & ~S_IFMT) | S_IFCHR;
+	node->rdev = rdev;
 	node->refcount = 1;
 	ret = find_ino(devnode);
 	if (ret)

@@ -6,6 +6,7 @@
 #include "dev/ide/ide.h"
 #include "dev/tty/tty.h"
 #include "dev/pci/pci.h"
+#include "dev/acpi/acpi.h"
 #include "x86.h"
 #include "io.h"
 
@@ -267,7 +268,7 @@ static uint32_t mb_get_memory_map_size(struct multiboot_info *mb_info)
 	return 0;
 }
 
-static struct tty *ttys[4];
+static struct tty *ttys[64];
 
 void boot(struct multiboot_info *mb_info)
 {
@@ -289,18 +290,23 @@ void boot(struct multiboot_info *mb_info)
 	if (mem_size < 0x1000000)
 		panic("can't get 16MB of memory\n");
 	paging_init(0x1000000, mem_size - 0x1000000);
+	struct rsdp *acpi_rsdp = acpi_find_rsdp();
 	*(uint32_t*)(0xFFFFF000) = 0; /* remove identity paging at 0x00000000 */
 
 	for (uint32_t i = 0; i < sizeof(ttys) / sizeof(*ttys); ++i)
 	{
 		char name[16];
 		snprintf(name, sizeof(name), "tty%" PRIu32, i);
-		int res = tty_create_vga(name, &ttys[i]);
+		int res = tty_create_vga(name, i, &ttys[i]);
 		if (res)
 			printf("can't create %s: %s", name, strerror(res));
 	}
 	curtty = ttys[0];
 	pci_init();
+	if (!acpi_rsdp)
+		panic("rsdp not found\n");
+	printf("found rsdp at %p\n", acpi_rsdp);
+	acpi_handle_rsdp(acpi_rsdp);
 
 	sti();
 

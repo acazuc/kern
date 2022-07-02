@@ -10,6 +10,7 @@ struct file
 {
 	const struct file_op *op;
 	struct fs_node *node;
+	off_t off;
 };
 
 struct file_op

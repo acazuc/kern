@@ -1,5 +1,6 @@
 #include "fs/vfs.h"
 
+#include <sys/file.h>
 #include <sys/stat.h>
 #include <string.h>
 #include <errno.h>
@@ -24,6 +25,10 @@ static struct fs_sb g_root_sb =
 	.type = &g_type,
 };
 
+static struct file_op g_root_fop =
+{
+};
+
 static struct fs_node_op g_root_op =
 {
 	.lookup = root_lookup,
@@ -32,6 +37,7 @@ static struct fs_node_op g_root_op =
 
 struct fs_node g_ramfs_root =
 {
+	.fop = &g_root_fop,
 	.op = &g_root_op,
 	.parent = &g_ramfs_root,
 	.sb = &g_root_sb,
@@ -59,5 +65,8 @@ static int root_readdir(struct fs_node *node, struct fs_readdir_ctx *ctx)
 {
 	(void)node;
 	(void)ctx;
-	return EINVAL;
+	int res = ctx->fn(ctx, "dev", 3, 0, 1, DT_DIR);
+	if (res)
+		return 1;
+	return -res;
 }

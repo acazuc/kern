@@ -62,6 +62,7 @@ SRC_NAME = kernel.c \
            dev/tty/tty.c \
            dev/tty/vga.c \
            dev/pci/pci.c \
+           dev/acpi/acpi.c \
            lib/string.c \
            lib/printf.c \
            lib/malloc.c \
@@ -83,17 +84,20 @@ OBJ_PATH = obj
 
 OBJ = $(addprefix $(OBJ_PATH)/, $(OBJ_NAME))
 
-all: odir $(ISO_NAME)
+all: $(ISO_NAME)
 
 $(OBJ_PATH)/%.c.o: $(SRC_PATH)/%.c
+	@mkdir -p $(dir $@)
 	@echo "CC $<"
 	@$(CC) -c $< -o $@ $(CFLAGS)
 
 $(OBJ_PATH)/%.s.o: $(SRC_PATH)/%.s
+	@mkdir -p $(dir $@)
 	@echo "ASM $<"
 	@$(ASM) $< -o $@
 
 $(OBJ_PATH)/%.S.o: $(SRC_PATH)/%.S
+	@mkdir -p $(dir $@)
 	@echo "AS $<"
 	@$(AS) $< -o $@
 
@@ -106,10 +110,12 @@ $(LIB):
 $(LDFILE):
 
 $(BIN_NAME): $(OBJ) $(LDFILE)
+	@mkdir -p $(dir $@)
 	@echo "LD $@"
 	@$(LD) -T $(LDFILE) -o $@ $(LDFLAGS) $(OBJ) -lgcc
 
 $(ISO_NAME): $(BIN_NAME)
+	@mkdir -p $(dir $<)
 	@mkdir -p isodir
 	@grub-mkrescue -o $@ isodir
 
@@ -124,7 +130,7 @@ $(DISK_FILE):
 
 run: all $(DISK_FILE)
 	@qemu-system-i386 \
-	-m 1024 \
+	-m 1024 -smp 2 \
 	-soundhw pcspk \
 	-device piix3-ide,id=ide \
 	-drive id=disk,file=$(DISK_FILE),format=qcow2,if=none \
@@ -134,27 +140,9 @@ run: all $(DISK_FILE)
 	-nic user,model=e1000 \
 	-kernel $(BIN_NAME)
 
-odir:
-	@mkdir -p $(OBJ_PATH)
-	@mkdir -p $(OBJ_PATH)/arch
-	@mkdir -p $(OBJ_PATH)/arch/x86
-	@mkdir -p $(OBJ_PATH)/dev
-	@mkdir -p $(OBJ_PATH)/dev/pic
-	@mkdir -p $(OBJ_PATH)/dev/vga
-	@mkdir -p $(OBJ_PATH)/dev/pit
-	@mkdir -p $(OBJ_PATH)/dev/com
-	@mkdir -p $(OBJ_PATH)/dev/ps2
-	@mkdir -p $(OBJ_PATH)/dev/ide
-	@mkdir -p $(OBJ_PATH)/dev/tty
-	@mkdir -p $(OBJ_PATH)/dev/pci
-	@mkdir -p $(OBJ_PATH)/lib
-	@mkdir -p $(OBJ_PATH)/fs
-	@mkdir -p $(OBJ_PATH)/fs/devfs
-	@mkdir -p $(OBJ_PATH)/fs/ramfs
-
 clean:
 	@rm -f $(OBJ)
 	@rm -f $(BIN_NAME)
 	@rm -f $(ISO_NAME)
 
-.PHONY: odir all clean run bin lib
+.PHONY: all clean run bin lib

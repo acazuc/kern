@@ -16,6 +16,7 @@ struct proc
 	uint32_t files_nb;
 	struct fs_node *root;
 	struct fs_node *cwd;
+	mode_t umask;
 	pid_t ppid;
 	pid_t pid;
 	pid_t pgid;

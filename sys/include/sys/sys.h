@@ -14,6 +14,8 @@
 
 #define SYS_GETPID    20
 
+#define SYS_FSTAT     28
+
 #define SYS_IOCTL     54
 
 #define SYS_SETPGID   57

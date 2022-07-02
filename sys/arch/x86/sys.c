@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <sys/sys.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 #include <errno.h>
 #include <time.h>
@@ -79,14 +80,19 @@ static int sys_open(const char *path, int flags, mode_t mode)
 		fs_node_decref(node);
 		return -ENOMEM;
 	}
-	ret = node->fop->open(file, node);
-	if (ret)
+	if (node->fop->open)
 	{
-		fs_node_decref(node);
-		return -ret;
+		ret = node->fop->open(file, node);
+		if (ret)
+		{
+			fs_node_decref(node);
+			free(file);
+			return -ret;
+		}
 	}
 	file->op = node->fop;
 	file->node = node;
+	file->off = 0;
 	struct filedesc *fd = realloc(curproc->files, sizeof(*curproc->files) * (curproc->files_nb + 1), 0);
 	if (!fd)
 	{
@@ -331,12 +337,87 @@ static int sys_stat(const char *pathname, struct stat *statbuf)
 	return 0;
 }
 
-static int sys_getdents(int fd, struct sys_dirent *dirp, unsigned count)
+static int sys_fstat(int fd, struct stat *statbuf)
+{
+	if (fd < 0 || (size_t)fd >= curproc->files_nb)
+		return -EBADF;
+	struct file *file = curproc->files[fd].file;
+	if (!file->op || !file->op->read)
+		return -EINVAL; /* XXX */
+	struct fs_node *node = file->node;
+	if (!node)
+		return -EINVAL;
+	statbuf->st_dev = node->sb->dev;
+	statbuf->st_ino = node->ino;
+	statbuf->st_mode = node->mode;
+	statbuf->st_nlink = node->nlink;
+	statbuf->st_uid = node->uid;
+	statbuf->st_gid = node->gid;
+	statbuf->st_rdev = node->rdev;
+	statbuf->st_size = node->size;
+	statbuf->st_blksize = node->blksize;
+	statbuf->st_blocks = node->blocks;
+	statbuf->st_atim = node->atime;
+	statbuf->st_mtim = node->mtime;
+	statbuf->st_ctim = node->ctime;
+	fs_node_decref(node);
+	return 0;
+}
+
+struct getdents_ctx
+{
+	struct fs_readdir_ctx readdir_ctx;
+	int res;
+	struct sys_dirent *dirp;
+	size_t count;
+	size_t off;
+};
+
+static int getdents_fn(struct fs_readdir_ctx *ctx, const char *name, uint32_t namelen, off_t off, ino_t ino, uint32_t type)
+{
+	struct getdents_ctx *getdents_ctx = ctx->userptr;
+	uint32_t entry_size = sizeof(struct sys_dirent) + namelen + 1;
+	if (entry_size > getdents_ctx->count)
+		return EINVAL;
+	getdents_ctx->dirp->ino = ino;
+	getdents_ctx->dirp->off = getdents_ctx->off;
+	getdents_ctx->dirp->reclen = entry_size;
+	getdents_ctx->dirp->type = type;
+	memcpy(getdents_ctx->dirp->name, name, namelen);
+	getdents_ctx->dirp->name[namelen] = 0;
+	getdents_ctx->count -= entry_size;
+	getdents_ctx->dirp = (struct sys_dirent*)((char*)getdents_ctx->dirp + entry_size);
+	getdents_ctx->off += entry_size;
+	return 0;
+}
+
+static int sys_getdents(int fd, struct sys_dirent *dirp, size_t count)
 {
 	if (!verify_userdata(dirp, count))
 		return -EFAULT;
-	/* XXX */
-	return 0;
+	if (fd < 0 || (size_t)fd >= curproc->files_nb)
+		return -EBADF;
+	struct file *file = curproc->files[fd].file;
+	struct fs_node *node = file->node;
+	if (!node)
+		return -EINVAL; /* XXX */
+	if (!node->op || !node->op->readdir)
+		return -EINVAL; /* XXX */
+	struct getdents_ctx getdents_ctx;
+	struct fs_readdir_ctx readdir_ctx;
+	readdir_ctx.fn = getdents_fn;
+	readdir_ctx.off = file->off;
+	readdir_ctx.userptr = &getdents_ctx;
+	getdents_ctx.res = 0;
+	getdents_ctx.dirp = dirp;
+	getdents_ctx.count = count;
+	getdents_ctx.off = 0;
+	int res = node->op->readdir(node, &readdir_ctx);
+	if (res < 0)
+		return res;
+	if (getdents_ctx.res)
+		return -getdents_ctx.res;
+	return getdents_ctx.off;
 };
 
 static int (*g_syscalls[])() =
@@ -370,6 +451,7 @@ static int (*g_syscalls[])() =
 	[SYS_GETPGID]   = sys_getpgid,
 	[SYS_IOCTL]     = sys_ioctl,
 	[SYS_STAT]      = sys_stat,
+	[SYS_FSTAT]     = sys_fstat,
 	[SYS_GETDENTS]  = sys_getdents,
 };
 

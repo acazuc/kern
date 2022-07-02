@@ -14,5 +14,7 @@ void *vmalloc(size_t bytes);
 void vfree(void *ptr, size_t bytes);
 void *vmalloc_user(size_t bytes);
 void vfree_user(void *ptr, size_t bytes);
+void *vmap(size_t paddr, size_t bytes);
+void vunmap(void *ptr, size_t bytes);
 
 #endif

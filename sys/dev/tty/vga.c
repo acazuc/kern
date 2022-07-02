@@ -214,14 +214,14 @@ static struct tty_op g_tty_vga_op =
 	.ctrl = vga_tty_ctrl,
 };
 
-int tty_create_vga(const char *name, struct tty **tty)
+int tty_create_vga(const char *name, int id, struct tty **tty)
 {
 	struct vga_tty *vga_tty = malloc(sizeof(*vga_tty), M_ZERO);
 	if (!vga_tty)
 		return ENOMEM;
 	vga_tty->fg_color = 7;
 	update_color(vga_tty);
-	int res = tty_create(name, &g_tty_vga_op, tty);
+	int res = tty_create(name, makedev(4, id), &g_tty_vga_op, tty);
 	if (res)
 		return res;
 	(*tty)->userptr = vga_tty;

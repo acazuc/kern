@@ -180,6 +180,29 @@ static void vmm_free_page(uint32_t addr)
 	INVALIDATE_PAGE(addr);
 }
 
+static void vmm_map_page(uint32_t addr, uint32_t paddr)
+{
+	if (addr & PAGE_MASK)
+		panic("vmap unaligned page 0x%lx\n", addr);
+	uint32_t dir_id = DIR_ID(addr);
+	uint32_t dir = DIR_VADDR[dir_id];
+	if (!(dir & DIR_FLAG_P))
+	{
+		dir = mkentry(pmm_alloc_page(), DIR_FLAG_RW | DIR_FLAG_P);
+		DIR_VADDR[dir_id] = dir;
+		memset(TBL_VADDR(dir_id), 0, PAGE_SIZE);
+	}
+	uint32_t *tbl_ptr = TBL_VADDR(dir_id);
+	uint32_t tbl_id = TBL_ID(addr);
+	uint32_t tbl = tbl_ptr[tbl_id];
+	if (tbl & TBL_FLAG_P)
+		panic("vmap already created page 0x%lx\n", addr);
+	if (tbl & TBL_FLAG_V)
+		panic("vmap already allocated page 0x%lx\n", addr);
+	tbl_ptr[tbl_id] = mkentry(paddr, TBL_FLAG_RW | TBL_FLAG_P);
+	INVALIDATE_PAGE(addr);
+}
+
 struct vmm_range
 {
 	uint32_t addr;
@@ -356,6 +379,27 @@ void *vmalloc_user(size_t size)
 void vfree_user(void *ptr, size_t size)
 {
 	vfree_zone(curthread->proc->vmm_ctx, ptr, size);
+}
+
+void *vmap(size_t paddr, size_t size)
+{
+	if (paddr & PAGE_MASK)
+		panic("vmap unaligned addr 0x%lx\n", paddr);
+	if (size & PAGE_MASK)
+		panic("vmap unaligned size 0x%lx\n", size);
+	uint32_t addr = vmm_get_free_range(&g_vmm_heap_ctx, size);
+	if (addr == UINT32_MAX)
+		return NULL;
+	if (addr & PAGE_MASK)
+		panic("vmap unaligned data 0x%lx\n", addr);
+	for (uint32_t i = 0; i < size; i += PAGE_SIZE)
+		vmm_map_page(addr + i, paddr + i);
+	return (void*)addr;
+}
+
+void vunmap(void *ptr, size_t bytes)
+{
+	/* XXX */
 }
 
 static void init_physical_maps(void)

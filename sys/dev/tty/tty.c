@@ -72,7 +72,7 @@ struct file_op g_tty_fop =
 	.ioctl = tty_fioctl,
 };
 
-int tty_create(const char *name, struct tty_op *op, struct tty **tty)
+int tty_create(const char *name, dev_t rdev, struct tty_op *op, struct tty **tty)
 {
 	*tty = malloc(sizeof(**tty), M_ZERO);
 	if (!*tty)
@@ -98,7 +98,7 @@ int tty_create(const char *name, struct tty_op *op, struct tty **tty)
 	for (size_t i = 0; i < sizeof((*tty)->args) / sizeof(*(*tty)->args); ++i)
 		(*tty)->args[i] = 0;
 	(*tty)->args_nb = 0;
-	int res = devfs_mkcdev(name, 0, 0, 0600, &g_tty_fop, &(*tty)->cdev);
+	int res = devfs_mkcdev(name, 0, 0, 0600, rdev, &g_tty_fop, &(*tty)->cdev);
 	if (res)
 	{
 		free(*tty);

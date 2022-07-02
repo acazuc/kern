@@ -193,6 +193,28 @@ static void exec_line(const char *line)
 	}
 	if (!strcmp(line, "ls"))
 	{
+		char buffer[4096];
+		write(g_fd, "1\n", 2);
+		int fd = open("/", O_RDONLY);
+		write(g_fd, "2\n", 2);
+		int res;
+		do
+		{
+			res = getdents(fd, (struct sys_dirent*)buffer, sizeof(buffer));
+			if (res < 0)
+			{
+				write(g_fd, "can't getdents\n", 15);
+				break;
+			}
+			for (int i = 0; i < res;)
+			{
+				struct sys_dirent *dirent = (struct sys_dirent*)&buffer[i];
+				write(g_fd, "file: ", 6);
+				write(g_fd, dirent->name, strlen(dirent->name));
+				write(g_fd, "\n", 1);
+				i += dirent->reclen;
+			}
+		} while (res);
 		return;
 	}
 	write(-2, "unknown command: ", 17);

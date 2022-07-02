@@ -53,11 +53,11 @@ struct fs_sb_op
 
 struct fs_readdir_ctx;
 
-typedef int (*fs_dircb_t)(struct fs_readdir_ctx *ctx, const char *name, uint32_t namelen, off_t off, ino_t ino, uint32_t type);
+typedef int (*fs_readdir_fn_t)(struct fs_readdir_ctx *ctx, const char *name, uint32_t namelen, off_t off, ino_t ino, uint32_t type);
 
 struct fs_readdir_ctx
 {
-	fs_dircb_t fn;
+	fs_readdir_fn_t fn;
 	off_t off;
 	void *userptr;
 };
