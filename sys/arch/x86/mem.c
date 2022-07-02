@@ -203,6 +203,21 @@ static void vmm_map_page(uint32_t addr, uint32_t paddr)
 	INVALIDATE_PAGE(addr);
 }
 
+static void vmm_unmap_page(uint32_t addr)
+{
+	uint32_t dir_id = DIR_ID(addr);
+	uint32_t dir = DIR_VADDR[dir_id];
+	if (!(dir & DIR_FLAG_P))
+		panic("free of unexisting dir\n");
+	uint32_t *tbl_ptr = TBL_VADDR(dir_id);
+	uint32_t tbl_id = TBL_ID(addr);
+	uint32_t tbl = tbl_ptr[tbl_id];
+	if (!(tbl & TBL_FLAG_P))
+		panic("unmap non-mapped page 0x%08lx\n", addr);
+	tbl_ptr[tbl_id] = mkentry(0, 0);
+	INVALIDATE_PAGE(addr);
+}
+
 struct vmm_range
 {
 	uint32_t addr;
@@ -397,9 +412,16 @@ void *vmap(size_t paddr, size_t size)
 	return (void*)addr;
 }
 
-void vunmap(void *ptr, size_t bytes)
+void vunmap(void *ptr, size_t size)
 {
-	/* XXX */
+	uint32_t addr = (uint32_t)ptr;
+	if (addr & PAGE_MASK)
+		panic("vunmap unaligned addr 0x%lx\n", addr);
+	if (size & PAGE_MASK)
+		panic("vunmap unaligned size 0x%lx\n", size);
+	vmm_set_free_range(&g_vmm_heap_ctx, addr, size);
+	for (uint32_t i = 0; i < size; i += PAGE_SIZE)
+		vmm_unmap_page(addr + i);
 }
 
 static void init_physical_maps(void)
