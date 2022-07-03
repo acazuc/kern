@@ -285,10 +285,8 @@ void boot(struct multiboot_info *mb_info)
 	ps2_init();
 	ide_init();
 	uint32_t mem_size = mb_get_memory_map_size(mb_info);
-	if (!mem_size)
-		panic("can't get memory map\n");
-	if (mem_size < 0x1000000)
-		panic("can't get 16MB of memory\n");
+	assert(mem_size, "can't get memory map\n");
+	assert(mem_size >= 0x1000000, "can't get 16MB of memory\n");
 	paging_init(0x1000000, mem_size - 0x1000000);
 	struct rsdp *acpi_rsdp = acpi_find_rsdp();
 	*(uint32_t*)(0xFFFFF000) = 0; /* remove identity paging at 0x00000000 */
@@ -303,9 +301,7 @@ void boot(struct multiboot_info *mb_info)
 	}
 	curtty = ttys[0];
 	pci_init();
-	if (!acpi_rsdp)
-		panic("rsdp not found\n");
-	printf("found rsdp at %p\n", acpi_rsdp);
+	assert(acpi_rsdp, "rsdp not found\n");
 	acpi_handle_rsdp(acpi_rsdp);
 
 	sti();

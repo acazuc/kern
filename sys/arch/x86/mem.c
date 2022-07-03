@@ -7,6 +7,21 @@
 #include <stdio.h>
 
 /*
+ * physical memory layout
+ *
+ * 0x00000000 - 0x0009FFFF (640 KB): main memory
+ * 0x000A0000 - 0x000BFFFF (128 KB): display buffer
+ * 0x000C0000 - 0x000DFFFF (128 KB): ROM BIOS for addon cards
+ * 0x000E0000 - 0x000FFFFF (128 KB): system ROM BIOS
+ * 0x00100000 - 0xFEBFFFFF (4.2 GB): main memory
+ * 0xFEC00000 - 0xFECFFFFF (1.0 MB): APIC IO unit
+ * 0xFED00000 - 0xFEDFFFFF (1.0 MB): memory-mapped IO devices
+ * 0xFEE00000 - 0xFEEFFFFF (1.0 MB): APIC local unit
+ * 0xFEF00000 - 0xFFFDFFFF (1.0 MB): memory-mapped IO devices
+ * 0xFFFE0000 - 0xFFFFFFFF (128 KB): init ROM
+ */
+
+/*
  * virtual memory layout
  *
  * 0x00000000 - 0xBFFFFFFF (3.2 GB): userland

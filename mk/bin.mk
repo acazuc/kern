@@ -41,21 +41,21 @@ OBJ = $(addprefix $(OBJ_PATH)/, $(OBJ_NAME))
 all: $(BIN)
 
 $(OBJ_PATH)/%.c.o: $(SRC_PATH)/%.c
-	@mkdir -p $(dir $<)
+	@mkdir -p $(dir $@)
 	@echo "CC $<"
 	@$(CC) -c $< -o $@ $(CFLAGS)
 
 $(OBJ_PATH)/%.s.o: $(SRC_PATH)/%.s
-	@mkdir -p $(dir $<)
+	@mkdir -p $(dir $@)
 	@echo "ASM $<"
 	@$(ASM) $< -o $@
 
 $(OBJ_PATH)/%.S.o: $(SRC_PATH)/%.S
-	@mkdir -p $(dir $<)
+	@mkdir -p $(dir $@)
 	@echo "AS $<"
 	@$(AS) $< -o $@
 
 $(BIN): $(OBJ)
-	@mkdir -p $(dir $<)
+	@mkdir -p $(dir $@)
 	@echo "LD $@"
 	@$(LD) -o $@ $(LDFLAGS) $< -lgcc

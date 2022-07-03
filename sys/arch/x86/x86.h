@@ -29,4 +29,11 @@ do \
 	x86_panic((uint32_t*)esp, __FILE__, QUOTEME(__LINE__), __func__, __VA_ARGS__); \
 } while (0)
 
+#define assert(expression, ...) \
+do \
+{ \
+	if (!(expression)) \
+		panic(__VA_ARGS__); \
+} while (0)
+
 #endif

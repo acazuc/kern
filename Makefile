@@ -130,7 +130,8 @@ $(DISK_FILE):
 
 run: all $(DISK_FILE)
 	@qemu-system-i386 \
-	-m 1024 -smp 2 \
+	-m 1024 \
+	-smp cores=2,threads=2 \
 	-soundhw pcspk \
 	-device piix3-ide,id=ide \
 	-drive id=disk,file=$(DISK_FILE),format=qcow2,if=none \
