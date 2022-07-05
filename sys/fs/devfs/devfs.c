@@ -2,6 +2,7 @@
 #include "devfs.h"
 
 #include <sys/stat.h>
+#include <sys/file.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -28,6 +29,10 @@ static struct fs_sb g_sb =
 	.type = &g_type,
 };
 
+static struct file_op g_root_fop =
+{
+};
+
 static struct fs_node_op g_root_op =
 {
 	.lookup = root_lookup,
@@ -36,6 +41,7 @@ static struct fs_node_op g_root_op =
 
 struct fs_node g_devfs_root =
 {
+	.fop = &g_root_fop,
 	.op = &g_root_op,
 	.parent = &g_ramfs_root,
 	.sb = &g_sb,
@@ -79,9 +85,34 @@ static int root_lookup(struct fs_node *dir, const char *name, uint32_t namelen, 
 
 static int root_readdir(struct fs_node *node, struct fs_readdir_ctx *ctx)
 {
-	(void)node;
-	(void)ctx;
-	return 0;
+	int res;
+	int written = 0;
+	if (ctx->off == 0)
+	{
+		res = ctx->fn(ctx, ".", 1, 0, 1, DT_DIR);
+		if (res)
+			return written;
+		written++;
+		ctx->off++;
+	}
+	if (ctx->off == 1)
+	{
+		res = ctx->fn(ctx, "..", 2, 1, node->parent ? node->parent->ino : node->ino, DT_DIR);
+		if (res)
+			return written;
+		written++;
+		ctx->off++;
+	}
+	for (size_t i = ctx->off - 2; i < g_nodes_nb; ++i)
+	{
+		struct devfs_node *dnode = g_nodes[i];
+		res = ctx->fn(ctx, dnode->name, strlen(dnode->name), i + 2, dnode->node->ino, dnode->node->mode >> 12);
+		if (res)
+			return written;
+		written++;
+		ctx->off++;
+	}
+	return written;
 }
 
 static int find_ino(struct devfs_node *node)

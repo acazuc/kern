@@ -48,4 +48,19 @@ static inline void sti(void)
 	__asm__ volatile ("sti");
 }
 
+static inline void rdmsr(uint32_t msr, uint32_t *h32, uint32_t *l32)
+{
+	__asm__ volatile ("rdmsr" : "=d"(*h32), "=a"(*l32) : "c"(msr));
+}
+
+static inline void wrmsr(uint32_t msr, uint32_t h32, uint32_t l32)
+{
+	__asm__ volatile ("wrmsr" : : "c"(msr), "d"(h32), "a"(l32));
+}
+
+static inline void invlpg(uint32_t vaddr)
+{
+	__asm__ volatile ("invlpg (%0)" : : "a"(vaddr) : "memory");
+}
+
 #endif

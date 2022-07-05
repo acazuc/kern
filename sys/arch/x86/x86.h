@@ -9,7 +9,6 @@
 
 #define PAGE_SIZE 4096
 
-
 void idt_init(void);
 void reload_segments(void);
 void gdt_init(void);
@@ -20,6 +19,30 @@ void x86_panic(uint32_t *esp, const char *file, const char *line, const char *fn
 void usermode(void (*fn)(void));
 uint32_t call_sys(uint32_t *args);
 int set_irq_handler(int id, void (*handler)(void));
+
+void eoi(void);
+
+enum isa_irq_id
+{
+	ISA_IRQ_PIT,
+	ISA_IRQ_KBD,
+	ISA_IRQ_CASCADE,
+	ISA_IEQ_COM2,
+	ISA_IRQ_COM1,
+	ISA_IRQ_LPT2,
+	ISA_IRQ_FLOPPY,
+	ISA_IRQ_LPT1,
+	ISA_IRQ_CMOS,
+	ISA_IRQ_FREE1,
+	ISA_IRQ_FREE2,
+	ISA_IRQ_FREE3,
+	ISA_IRQ_MOUSE,
+	ISA_IRQ_FPU,
+	ISA_IRQ_ATA1,
+	ISA_IRQ_ATA2,
+};
+
+extern int g_isa_irq[16];
 
 #define panic(...) \
 do \

@@ -1,5 +1,5 @@
 #include "vga.h"
-#include "arch/x86/io.h"
+#include "arch/x86/asm.h"
 
 #include <stddef.h>
 #include <stdint.h>

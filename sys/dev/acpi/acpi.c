@@ -119,7 +119,7 @@ enum madt_int_src_override_flags
 	MADT_INT_SRC_OVERRIDE_F_TRIGGER_CONFORM  = 0x0,
 	MADT_INT_SRC_OVERRIDE_F_TRIGGER_EDGE     = 0x4,
 	MADT_INT_SRC_OVERRIDE_F_TRIGGER_LEVEL    = 0xC,
-	MADT_INT_SRC_OVERRIDE_F_TRIGGER_MASK     = 0xC
+	MADT_INT_SRC_OVERRIDE_F_TRIGGER_MASK     = 0xC,
 };
 
 enum acpi_address_space_id
@@ -276,6 +276,7 @@ static void handle_madt(const struct madt *madt)
 			case MADT_INT_SRC_OVERRIDE:
 			{
 				struct madt_int_src_override *src_override = (struct madt_int_src_override*)entry;
+				g_isa_irq[src_override->source] = src_override->gsi;
 				printf("int src override: %d, %lx, %lx\n", src_override->source, src_override->gsi, src_override->flags);
 				break;
 			}

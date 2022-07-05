@@ -1,5 +1,5 @@
 #include "ps2.h"
-#include "arch/x86/io.h"
+#include "arch/x86/asm.h"
 #include "arch/x86/x86.h"
 #include "dev/tty/tty.h"
 
@@ -256,7 +256,7 @@ static size_t g_kbd_buffer_size;
 
 static enum kbd_mod g_kbd_mods;
 
-static void ps2_interrupt(void);
+static void kbd_interrupt(void);
 
 static uint32_t get_scancode(enum kbd_key key, uint32_t mods)
 {
@@ -271,10 +271,10 @@ static uint32_t get_scancode(enum kbd_key key, uint32_t mods)
 
 void ps2_init()
 {
-	set_irq_handler(1, ps2_interrupt);
+	set_irq_handler(g_isa_irq[ISA_IRQ_KBD], kbd_interrupt);
 }
 
-static void ps2_interrupt(void)
+static void kbd_interrupt(void)
 {
 	uint8_t c = inb(0x60);
 	if (c == 0xE0)
@@ -355,5 +355,5 @@ static void ps2_interrupt(void)
 		}
 	}
 end:
-	outb(0x20, 0x20);
+	eoi();
 }

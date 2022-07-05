@@ -63,6 +63,8 @@ SRC_NAME = kernel.c \
            dev/tty/vga.c \
            dev/pci/pci.c \
            dev/acpi/acpi.c \
+           dev/apic/ioapic.c \
+           dev/apic/lapic.c \
            lib/string.c \
            lib/printf.c \
            lib/malloc.c \

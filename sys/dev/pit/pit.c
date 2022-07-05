@@ -1,5 +1,5 @@
 #include "pit.h"
-#include "arch/x86/io.h"
+#include "arch/x86/asm.h"
 #include "arch/x86/x86.h"
 
 #define DATA0 0x40
@@ -36,7 +36,7 @@ static void pit_interrupt(void);
 
 void pit_init()
 {
-	set_irq_handler(0, pit_interrupt);
+	set_irq_handler(g_isa_irq[ISA_IRQ_PIT], pit_interrupt);
 	outb(CMD, CMD_CHAN_0 | CMD_ACCESS_MBYTE | CMD_OP_MODE3);
 	outb(DATA0, PIC_DIV & 0xFF);
 	outb(DATA0, (PIC_DIV >> 8) & 0xFF);
@@ -50,7 +50,7 @@ static void pit_interrupt(void)
 		g_sec++;
 		g_nsec -= 1000000000;
 	}
-	outb(0x20, 0x20);
+	eoi();
 }
 
 void pit_gettime(struct timespec *ts)

@@ -1,5 +1,5 @@
 #include "com.h"
-#include "arch/x86/io.h"
+#include "arch/x86/asm.h"
 #include "arch/x86/x86.h"
 
 #include <stdint.h>
@@ -43,11 +43,11 @@ void com_putchar(char c)
 
 static void com_interrupt(void)
 {
-	outb(0x20, 0x20);
+	eoi();
 }
 
 void com_init()
 {
 	init_port(COM1);
-	set_irq_handler(4, com_interrupt);
+	set_irq_handler(g_isa_irq[ISA_IRQ_COM1], com_interrupt);
 }

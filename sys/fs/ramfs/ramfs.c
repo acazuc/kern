@@ -63,10 +63,31 @@ static int root_lookup(struct fs_node *node, const char *name, uint32_t namelen,
 
 static int root_readdir(struct fs_node *node, struct fs_readdir_ctx *ctx)
 {
-	(void)node;
-	(void)ctx;
-	int res = ctx->fn(ctx, "dev", 3, 0, 1, DT_DIR);
-	if (res)
-		return 1;
-	return -res;
+	int res;
+	int written = 0;
+	if (ctx->off == 0)
+	{
+		res = ctx->fn(ctx, ".", 1, 0, 1, DT_DIR);
+		if (res)
+			return written;
+		written++;
+		ctx->off++;
+	}
+	if (ctx->off == 1)
+	{
+		res = ctx->fn(ctx, "..", 2, 1, node->parent ? node->parent->ino : node->ino, DT_DIR);
+		if (res)
+			return written;
+		written++;
+		ctx->off++;
+	}
+	if (ctx->off == 2)
+	{
+		res = ctx->fn(ctx, "dev", 3, 2, 2, DT_DIR);
+		if (res)
+			return written;
+		written++;
+		ctx->off++;
+	}
+	return written;
 }

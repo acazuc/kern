@@ -8,7 +8,7 @@
 #include "dev/pci/pci.h"
 #include "dev/acpi/acpi.h"
 #include "x86.h"
-#include "io.h"
+#include "asm.h"
 
 #include <multiboot.h>
 #include <sys/file.h>
@@ -16,6 +16,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <cpuid.h>
+
+int g_isa_irq[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
 
 enum cpuid_feature
 {
@@ -277,13 +279,9 @@ void boot(struct multiboot_info *mb_info)
 	printf("x86 boot @ %p\n", boot);
 	print_multiboot(mb_info);
 	print_cpuid();
-	pic_init(0x20, 0x28);
 	gdt_init();
 	idt_init();
-	pit_init();
-	com_init();
-	ps2_init();
-	ide_init();
+	pic_init(0x20, 0x28);
 	uint32_t mem_size = mb_get_memory_map_size(mb_info);
 	assert(mem_size, "can't get memory map\n");
 	assert(mem_size >= 0x1000000, "can't get 16MB of memory\n");
@@ -303,7 +301,12 @@ void boot(struct multiboot_info *mb_info)
 	pci_init();
 	assert(acpi_rsdp, "rsdp not found\n");
 	acpi_handle_rsdp(acpi_rsdp);
-
+	ioapic_init(0);
+	lapic_init();
+	pit_init();
+	com_init();
+	ps2_init();
+	ide_init();
 	sti();
 
 #if 0
@@ -351,4 +354,10 @@ infl:
 	sti();
 	__asm__ volatile ("hlt");
 	goto infl;
+}
+
+void eoi()
+{
+	//outb(0x20, 0x20);
+	lapic_eoi();
 }

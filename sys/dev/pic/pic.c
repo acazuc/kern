@@ -1,5 +1,5 @@
 #include "pic.h"
-#include "arch/x86/io.h"
+#include "arch/x86/asm.h"
 
 #define PIC1_CMD  0x20
 #define PIC1_DATA 0x21
@@ -36,6 +36,6 @@ void pic_init(uint8_t offset1, uint8_t offset2)
 	outb(PIC2_DATA, ICW4_8086);
 	io_wait();
 
-	outb(PIC1_DATA, ~0x13);
+	outb(PIC1_DATA, ~0x0);
 	outb(PIC2_DATA, ~0x0);
 }

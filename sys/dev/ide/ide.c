@@ -1,5 +1,5 @@
 #include "ide.h"
-#include "arch/x86/io.h"
+#include "arch/x86/asm.h"
 #include <stdint.h>
 #include <errno.h>
 

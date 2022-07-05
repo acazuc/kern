@@ -193,10 +193,8 @@ static void exec_line(const char *line)
 	}
 	if (!strcmp(line, "ls"))
 	{
-		char buffer[4096];
-		write(g_fd, "1\n", 2);
-		int fd = open("/", O_RDONLY);
-		write(g_fd, "2\n", 2);
+		char buffer[128];
+		int fd = open("/dev", O_RDONLY);
 		int res;
 		do
 		{

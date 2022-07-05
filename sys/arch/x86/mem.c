@@ -1,4 +1,5 @@
 #include "x86.h"
+#include "asm.h"
 
 #include <sys/proc.h>
 #include <string.h>
@@ -80,8 +81,6 @@
 #define DIR_VADDR      ((uint32_t*)0xFFFFF000)
 
 #define PAGE_MASK 0x0FFF
-
-#define INVALIDATE_PAGE(page) __asm__ volatile ("invlpg (%0)" : : "a"(page) : "memory");
 
 static uint32_t *g_pmm_bitmap;
 static uint32_t g_pmm_bitmap_size; /* of uint32_t */
@@ -177,7 +176,7 @@ static void vmm_alloc_page(uint32_t addr)
 	if (tbl & TBL_FLAG_V)
 		panic("vmalloc already allocated page 0x%lx\n", addr);
 	tbl_ptr[tbl_id] = mkentry(0, TBL_FLAG_V);
-	INVALIDATE_PAGE(addr);
+	invlpg(addr);
 }
 
 static void vmm_free_page(uint32_t addr)
@@ -192,7 +191,7 @@ static void vmm_free_page(uint32_t addr)
 	if (tbl & TBL_FLAG_P)
 		pmm_free_page(DIR_TBL_ADDR(tbl));
 	tbl_ptr[tbl_id] = mkentry(0, 0);
-	INVALIDATE_PAGE(addr);
+	invlpg(addr);
 }
 
 static void vmm_map_page(uint32_t addr, uint32_t paddr)
@@ -215,7 +214,7 @@ static void vmm_map_page(uint32_t addr, uint32_t paddr)
 	if (tbl & TBL_FLAG_V)
 		panic("vmap already allocated page 0x%lx\n", addr);
 	tbl_ptr[tbl_id] = mkentry(paddr, TBL_FLAG_RW | TBL_FLAG_P);
-	INVALIDATE_PAGE(addr);
+	invlpg(addr);
 }
 
 static void vmm_unmap_page(uint32_t addr)
@@ -230,7 +229,7 @@ static void vmm_unmap_page(uint32_t addr)
 	if (!(tbl & TBL_FLAG_P))
 		panic("unmap non-mapped page 0x%08lx\n", addr);
 	tbl_ptr[tbl_id] = mkentry(0, 0);
-	INVALIDATE_PAGE(addr);
+	invlpg(addr);
 }
 
 struct vmm_range

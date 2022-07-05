@@ -80,7 +80,7 @@ static int sys_open(const char *path, int flags, mode_t mode)
 		fs_node_decref(node);
 		return -ENOMEM;
 	}
-	if (node->fop->open)
+	if (node->fop && node->fop->open)
 	{
 		ret = node->fop->open(file, node);
 		if (ret)
@@ -96,7 +96,8 @@ static int sys_open(const char *path, int flags, mode_t mode)
 	struct filedesc *fd = realloc(curproc->files, sizeof(*curproc->files) * (curproc->files_nb + 1), 0);
 	if (!fd)
 	{
-		file->op->close(file);
+		if (file->op && file->op->close)
+			file->op->close(file);
 		free(file); /* XXX: deref */
 		return -ENOMEM;
 	}
@@ -113,7 +114,8 @@ static int sys_close(int fd)
 	struct file *file = curproc->files[fd].file;
 	if (!file)
 		return -EBADF;
-	file->op->close(file);
+	if (file->op && file->op->close)
+		file->op->close(file);
 	free(file); /* XXX: decref */
 	return -ENOSYS;
 }
@@ -413,6 +415,7 @@ static int sys_getdents(int fd, struct sys_dirent *dirp, size_t count)
 	getdents_ctx.count = count;
 	getdents_ctx.off = 0;
 	int res = node->op->readdir(node, &readdir_ctx);
+	file->off = readdir_ctx.off;
 	if (res < 0)
 		return res;
 	if (getdents_ctx.res)

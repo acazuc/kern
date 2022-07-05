@@ -1,5 +1,5 @@
 #include "x86.h"
-#include "io.h"
+#include "asm.h"
 
 #include <stdint.h>
 #include <stdio.h>
