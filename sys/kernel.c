@@ -4,13 +4,14 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "arch/x86/asm.h"
 #include "arch/arch.h"
 #include "fs/vfs.h"
 
 static void infl(void)
 {
 loop:
-	__asm__ volatile ("hlt");
+	hlt();
 	goto loop;
 }
 

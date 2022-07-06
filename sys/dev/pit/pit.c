@@ -24,37 +24,36 @@
 #define CMD_OP_MODE4 0x08
 #define CMD_OP_MODE5 0x09
 
-#define PIC_FREQ 1193182
+#define PIT_FREQ 1193182
 
-#define PIC_DIV  0x1000
-#define PIC_INC  (1000000000ULL * PIC_DIV / PIC_FREQ)
+#define PIT_DIV  0x1000
+#define PIT_INC  (1000000000ULL * PIT_DIV / PIT_FREQ) /* ~166.665 ns offset per second */
 
-static uint32_t g_sec;
-static uint32_t g_nsec;
+static struct timespec g_ts;
 
 static void pit_interrupt(void);
 
 void pit_init()
 {
-	set_irq_handler(g_isa_irq[ISA_IRQ_PIT], pit_interrupt);
 	outb(CMD, CMD_CHAN_0 | CMD_ACCESS_MBYTE | CMD_OP_MODE3);
-	outb(DATA0, PIC_DIV & 0xFF);
-	outb(DATA0, (PIC_DIV >> 8) & 0xFF);
+	outb(DATA0, PIT_DIV & 0xFF);
+	outb(DATA0, (PIT_DIV >> 8) & 0xFF);
+	set_isa_irq_handler(ISA_IRQ_PIT, pit_interrupt);
+	enable_isa_irq(ISA_IRQ_PIT);
 }
 
 static void pit_interrupt(void)
 {
-	g_nsec += PIC_INC;
-	if (g_nsec >= 1000000000)
+	g_ts.tv_nsec += PIT_INC;
+	if (g_ts.tv_nsec >= 1000000000)
 	{
-		g_sec++;
-		g_nsec -= 1000000000;
+		g_ts.tv_sec++;
+		g_ts.tv_nsec -= 1000000000;
 	}
-	eoi();
+	isa_eoi(ISA_IRQ_PIT);
 }
 
 void pit_gettime(struct timespec *ts)
 {
-	ts->tv_sec = g_sec;
-	ts->tv_nsec = g_nsec;
+	*ts = g_ts;
 }

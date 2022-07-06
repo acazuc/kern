@@ -184,10 +184,11 @@ static void (*g_exception_handlers[256])(struct exception_ctx*) =
 	[0x80] = handle_syscall,
 };
 
-int set_irq_handler(int id, void (*handler)(void))
+int set_isa_irq_handler(enum isa_irq_id irq_id, void (*handler)(void))
 {
+	int id = g_isa_irq[irq_id];
 	if (id < 0 || id >= 0x20 || g_exception_handlers[0x20 + id])
 		return EINVAL;
-	g_exception_handlers[0x20 + id] = handler;
+	g_exception_handlers[0x20 + id] = (void*)handler;
 	return 0;
 }

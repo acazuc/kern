@@ -29,7 +29,7 @@ static void set_descriptor(struct idt_entry *descriptor, void *isr, uint8_t flag
 	descriptor->reserved   = 0;
 }
 
-void idt_init()
+void idt_init(void)
 {
 	for (int i = 0; i < 256; ++i)
 		set_descriptor(&g_idt[i], g_isr_table[i], i == 0x80 ? 0xEE : 0x8E);

@@ -57,7 +57,7 @@ int atoin(const char *s, size_t n)
 
 static size_t lltoa_get_size(long long int n, size_t base_len)
 {
-	size_t size = n < 0 ? 2 : 1;
+	size_t size = 1;
 	if (n == LLONG_MIN)
 	{
 		n = 0 - n / base_len;

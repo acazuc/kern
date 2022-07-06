@@ -40,7 +40,7 @@ static inline uint16_t vga_entry(unsigned char uc, uint8_t color)
 	return (uint16_t)uc | (uint16_t)color << 8;
 }
 
-void vga_init()
+void vga_init(void)
 {
 	uint16_t clear_entry = vga_entry(' ', vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
 	for (size_t i = 0; i < VGA_WIDTH * VGA_HEIGHT; ++i)
@@ -71,7 +71,7 @@ void vga_set_cursor(uint8_t x, uint8_t y)
 	outb(CRTC_DATA, p & 0xFF);
 }
 
-void vga_enable_cursor()
+void vga_enable_cursor(void)
 {
 	outb(CRTC_ADDR, CRTC_ADDR_CURSOR_BEG);
 	outb(CRTC_DATA, (inb(CRTC_DATA) & 0xC0) | 13);
@@ -79,7 +79,7 @@ void vga_enable_cursor()
 	outb(CRTC_DATA, (inb(CRTC_DATA) & 0xE0) | 15);
 }
 
-void vga_disable_cursor()
+void vga_disable_cursor(void)
 {
 	outb(CRTC_ADDR, CRTC_ADDR_CURSOR_BEG);
 	outb(CRTC_DATA, 0x20);

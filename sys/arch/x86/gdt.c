@@ -88,7 +88,7 @@ static void encode_entry(uint8_t *target, const struct gdt_entry *source)
 	target[7] = (source->base >> 24) & 0xFF;
 }
 
-void gdt_init()
+void gdt_init(void)
 {
 	for (size_t i = 0; i < sizeof(g_gdt_entries) / sizeof(*g_gdt_entries); ++i)
 		encode_entry(&gdt_data[8 * i], &g_gdt_entries[i]);

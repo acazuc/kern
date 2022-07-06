@@ -9,19 +9,6 @@
 
 #define PAGE_SIZE 4096
 
-void idt_init(void);
-void reload_segments(void);
-void gdt_init(void);
-void paging_init(uint32_t addr, uint32_t size);
-void paging_alloc(uint32_t addr);
-void paging_dumpinfo(void);
-void x86_panic(uint32_t *esp, const char *file, const char *line, const char *fn, const char *fmt, ...)  __attribute__((format(printf, 5, 6)));
-void usermode(void (*fn)(void));
-uint32_t call_sys(uint32_t *args);
-int set_irq_handler(int id, void (*handler)(void));
-
-void eoi(void);
-
 enum isa_irq_id
 {
 	ISA_IRQ_PIT,
@@ -41,6 +28,20 @@ enum isa_irq_id
 	ISA_IRQ_ATA1,
 	ISA_IRQ_ATA2,
 };
+
+void idt_init(void);
+void reload_segments(void);
+void gdt_init(void);
+void paging_init(uint32_t addr, uint32_t size);
+void paging_alloc(uint32_t addr);
+void paging_dumpinfo(void);
+void x86_panic(uint32_t *esp, const char *file, const char *line, const char *fn, const char *fmt, ...)  __attribute__((format(printf, 5, 6)));
+void usermode(void (*fn)(void));
+uint32_t call_sys(uint32_t *args);
+int set_isa_irq_handler(enum isa_irq_id irq, void (*handler)(void));
+void enable_isa_irq(enum isa_irq_id id);
+void disable_isa_irq(enum isa_irq_id id);
+void isa_eoi(enum isa_irq_id id);
 
 extern int g_isa_irq[16];
 

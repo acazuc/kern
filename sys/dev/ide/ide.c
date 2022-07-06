@@ -145,13 +145,13 @@ static void ide_read_buffer(uint8_t channel, uint8_t reg, uint32_t *buffer, uint
 	if (reg > 0x07 && reg < 0x0C)
 		ide_write(channel, ATA_REG_CONTROL, 0x80 | g_channels[channel].nien);
 	if (reg < 0x08)
-		insl(g_channels[channel].base  + reg - 0x00, buffer, quads);
+		inla(g_channels[channel].base  + reg - 0x00, buffer, quads);
 	else if (reg < 0x0C)
-		insl(g_channels[channel].base  + reg - 0x06, buffer, quads);
+		inla(g_channels[channel].base  + reg - 0x06, buffer, quads);
 	else if (reg < 0x0E)
-		insl(g_channels[channel].ctrl  + reg - 0x0A, buffer, quads);
+		inla(g_channels[channel].ctrl  + reg - 0x0A, buffer, quads);
 	else if (reg < 0x16)
-		insl(g_channels[channel].bmide + reg - 0x0E, buffer, quads);
+		inla(g_channels[channel].bmide + reg - 0x0E, buffer, quads);
 	if (reg > 0x07 && reg < 0x0C)
 		ide_write(channel, ATA_REG_CONTROL, g_channels[channel].nien);
 }
@@ -178,7 +178,7 @@ static int ide_polling(uint8_t channel, uint32_t advanced_check)
 	return 0;
 }
 
-void ide_init()
+void ide_init(void)
 {
 	uint8_t ide_buf[2048] = {0};
 
@@ -349,7 +349,7 @@ static int ide_ata_access(uint8_t dir, uint8_t drive, uint32_t lba, uint8_t nums
 			int err = ide_polling(channel, 1);
 			if (err)
 				return err;
-			__asm__ volatile ("rep insw" : : "c"(words), "d"(g_channels[channel].base), "D"(buffer));
+			repinsw(buffer, (void*)(intptr_t)g_channels[channel].base, words);
 			buffer += words * 2;
 		}
 	}
@@ -360,12 +360,11 @@ static int ide_ata_access(uint8_t dir, uint8_t drive, uint32_t lba, uint8_t nums
 			int err = ide_polling(channel, 0);
 			if (err)
 				return err;
-			__asm__ volatile ("rep outsw"::"c"(words), "d"(g_channels[channel].base), "S"(buffer));
+			repoutsw((void*)(intptr_t)g_channels[channel].base, buffer, words);
 			buffer += words * 2;
 		}
-		ide_write(channel, ATA_REG_COMMAND, (char[]){ATA_CMD_CACHE_FLUSH,
-		                                             ATA_CMD_CACHE_FLUSH,
-		                                             ATA_CMD_CACHE_FLUSH_EXT}[lba_mode]);
+		static const char flush_cmds[] = {ATA_CMD_CACHE_FLUSH, ATA_CMD_CACHE_FLUSH, ATA_CMD_CACHE_FLUSH_EXT};
+		ide_write(channel, ATA_REG_COMMAND, flush_cmds[lba_mode]);
 		int err = ide_polling(channel, 0);
 		if (err)
 			return err;

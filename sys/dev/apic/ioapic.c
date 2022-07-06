@@ -4,6 +4,13 @@
 #include <stddef.h>
 #include <stdio.h>
 
+/*
+ * Intel®
+ * 82093AA I/O ADVANCED
+ * PROGRAMMABLE INTERRUPT
+ * CONTROLLER (IOAPIC)
+ */
+
 #define IOAPIC_IOREGSEL 0x0
 #define IOAPIC_IOWIN    0x4
 
@@ -27,7 +34,9 @@ struct ioapic
 	uint32_t volatile *data;
 };
 
-struct ioapic ioapic0;
+static struct ioapic g_ioapic0;
+static struct ioapic *g_ioapics[1];
+static int g_ioapics_nb;
 
 void ioapic_enable_int(uint8_t id, uint8_t intid);
 
@@ -45,18 +54,33 @@ static void ioapic_wr(struct ioapic *ioapic, uint32_t reg, uint32_t v)
 
 void ioapic_init(uint8_t id)
 {
-	struct ioapic *ioapic = &ioapic0; /* XXX: use id */
+	g_ioapics[0] = &g_ioapic0; /* XXX: don't hardcode */
+	g_ioapics_nb = 1; /* XXX: don't hardcode */
+
+	assert(id < g_ioapics_nb, "invalid ioapic id");
+	struct ioapic *ioapic = g_ioapics[id];
+	assert(ioapic, "ioapic is NULL");
 	ioapic->data = vmap(0xFEC00000 + id * 0x100, 4096); /* XXX: use addr from ACPI */
 	printf("ioapic id: 0x%lx\n", ioapic_rd(ioapic, IOAPIC_REG_ID));
 	printf("ioapic version: 0x%lx\n", ioapic_rd(ioapic, IOAPIC_REG_VER));
-	ioapic_enable_int(id, ISA_IRQ_PIT);
-	ioapic_enable_int(id, ISA_IRQ_KBD);
 }
 
-void ioapic_enable_int(uint8_t id, uint8_t intid)
+void ioapic_enable_irq(uint8_t id, enum isa_irq_id irqid)
 {
-	struct ioapic *ioapic = &ioapic0; /* XXX: use id */
-	uint32_t reg_base = IOAPIC_REG_REDTBL + intid * 2;
-	ioapic_wr(ioapic, reg_base + 0, intid + 32);
+	assert(id < g_ioapics_nb, "invalid ioapic id");
+	struct ioapic *ioapic = g_ioapics[id];
+	assert(ioapic, "ioapic is NULL");
+	uint32_t reg_base = IOAPIC_REG_REDTBL + g_isa_irq[irqid] * 2;
+	ioapic_wr(ioapic, reg_base + 0, g_isa_irq[irqid] + 32);
 	ioapic_wr(ioapic, reg_base + 1, 0xFF << 24); /* XXX: set cpu mask ? */
+}
+
+void ioapic_disable_irq(uint8_t id, enum isa_irq_id irqid)
+{
+	assert(id < g_ioapics_nb, "invalid ioapic id");
+	struct ioapic *ioapic = g_ioapics[id];
+	assert(ioapic, "ioapic is NULL");
+	uint32_t reg_base = IOAPIC_REG_REDTBL + g_isa_irq[irqid] * 2;
+	ioapic_wr(ioapic, reg_base + 0, IOAPIC_R_INT_MASK);
+	ioapic_wr(ioapic, reg_base + 1, 0);
 }

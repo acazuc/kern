@@ -32,7 +32,7 @@ static inline void io_wait(void)
     outb(0x80, 0);
 }
 
-static inline void insl(uint16_t port, uint32_t *buffer, uint32_t n)
+static inline void inla(uint16_t port, uint32_t *buffer, uint32_t n)
 {
 	for (uint32_t i = 0; i < n; ++i)
 		buffer[i] = inl(port);
@@ -48,6 +48,11 @@ static inline void sti(void)
 	__asm__ volatile ("sti");
 }
 
+static inline void hlt(void)
+{
+	__asm__ volatile ("hlt");
+}
+
 static inline void rdmsr(uint32_t msr, uint32_t *h32, uint32_t *l32)
 {
 	__asm__ volatile ("rdmsr" : "=d"(*h32), "=a"(*l32) : "c"(msr));
@@ -61,6 +66,16 @@ static inline void wrmsr(uint32_t msr, uint32_t h32, uint32_t l32)
 static inline void invlpg(uint32_t vaddr)
 {
 	__asm__ volatile ("invlpg (%0)" : : "a"(vaddr) : "memory");
+}
+
+static inline void repinsw(void *dst, void *src, uint32_t n)
+{
+	__asm__ volatile ("rep insw" : : "c"(n), "d"(src), "D"(dst));
+}
+
+static inline void repoutsw(void *dst, void *src, uint32_t n)
+{
+	__asm__ volatile ("rep outsw" : : "c"(n), "d"(dst), "D"(src));
 }
 
 #endif

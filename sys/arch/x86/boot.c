@@ -6,7 +6,9 @@
 #include "dev/ide/ide.h"
 #include "dev/tty/tty.h"
 #include "dev/pci/pci.h"
+#include "dev/rtc/rtc.h"
 #include "dev/acpi/acpi.h"
+#include "dev/apic/apic.h"
 #include "x86.h"
 #include "asm.h"
 
@@ -18,6 +20,8 @@
 #include <cpuid.h>
 
 int g_isa_irq[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+
+static int has_apic; /* XXX */
 
 enum cpuid_feature
 {
@@ -272,23 +276,8 @@ static uint32_t mb_get_memory_map_size(struct multiboot_info *mb_info)
 
 static struct tty *ttys[64];
 
-void boot(struct multiboot_info *mb_info)
+static void tty_init(void)
 {
-	vga_init();
-	printf("\n");
-	printf("x86 boot @ %p\n", boot);
-	print_multiboot(mb_info);
-	print_cpuid();
-	gdt_init();
-	idt_init();
-	pic_init(0x20, 0x28);
-	uint32_t mem_size = mb_get_memory_map_size(mb_info);
-	assert(mem_size, "can't get memory map\n");
-	assert(mem_size >= 0x1000000, "can't get 16MB of memory\n");
-	paging_init(0x1000000, mem_size - 0x1000000);
-	struct rsdp *acpi_rsdp = acpi_find_rsdp();
-	*(uint32_t*)(0xFFFFF000) = 0; /* remove identity paging at 0x00000000 */
-
 	for (uint32_t i = 0; i < sizeof(ttys) / sizeof(*ttys); ++i)
 	{
 		char name[16];
@@ -298,16 +287,48 @@ void boot(struct multiboot_info *mb_info)
 			printf("can't create %s: %s", name, strerror(res));
 	}
 	curtty = ttys[0];
+}
+
+void boot(struct multiboot_info *mb_info)
+{
+	vga_init();
+	printf("\n");
+	printf("x86 boot @ %p\n", boot);
+	print_multiboot(mb_info);
+	print_cpuid();
+	uint32_t mem_size = mb_get_memory_map_size(mb_info);
+	assert(mem_size, "can't get memory map\n");
+	assert(mem_size >= 0x1000000, "can't get 16MB of memory\n");
+	paging_init(0x1000000, mem_size - 0x1000000);
+	gdt_init();
+	idt_init();
+	pic_init(0x20, 0x28);
+	tty_init();
+	*(uint32_t*)(0xFFFFF000) = 0; /* remove identity paging at 0x00000000 */
 	pci_init();
-	assert(acpi_rsdp, "rsdp not found\n");
-	acpi_handle_rsdp(acpi_rsdp);
-	ioapic_init(0);
-	lapic_init();
+	acpi_init();
+	has_apic = 1;
+	if (has_apic)
+	{
+		ioapic_init(0);
+		lapic_init();
+	}
 	pit_init();
+	rtc_init();
 	com_init();
 	ps2_init();
 	ide_init();
 	sti();
+	while (1)
+	{
+		struct timespec pit_ts;
+		struct timespec rtc_ts;
+		pit_gettime(&pit_ts);
+		rtc_gettime(&rtc_ts);
+		int64_t pit_t = pit_ts.tv_sec * 1000000000LL + pit_ts.tv_nsec;
+		int64_t rtc_t = rtc_ts.tv_sec * 1000000000LL + rtc_ts.tv_nsec;
+		//printf("diff: %lld (%010lld / %010lld)\n", (pit_t - rtc_t) / 1000, pit_t, rtc_t);
+	}
 
 #if 0
 	uint8_t buf[512];
@@ -325,39 +346,47 @@ void x86_panic(uint32_t *esp, const char *file, const char *line, const char *fn
 	va_start(va_arg, fmt);
 	vprintf(fmt, va_arg);
 	printf("%s@%s:%s\n", fn, file, line);
-	printf("EAX: %08lx EBX: %08lx ECX: %08lx EDX: %08lx\n", esp[9], esp[6], esp[8], esp[7]);
-	printf("ESI: %08lx EDI: %08lx ESP: %08lx EBP: %08lx\n", esp[3], esp[2], esp[5], esp[4]);
+	printf("EAX: %08lx EBX: %08lx ECX: %08lx EDX: %08lx\n", esp[8], esp[5], esp[7], esp[6]);
+	printf("ESI: %08lx EDI: %08lx ESP: %08lx EBP: %08lx\n", esp[2], esp[1], esp[4], esp[3]);
 	printf("EIP: %08lx\n", esp[0]);
 
 #if 0
-	void *ptr[64];
-	bool end = false;
-
-#define N1(n) if (!end) { ptr[n] = __builtin_return_address(n); if (!ptr[n]) { end = true; } }
-#define N2(n) N1(n + 0) N1(n + 1)
-#define N4(n) N2(n + 0) N2(n + 2)
-#define N8(n) N4(n + 0) N4(n + 4)
-#define N16(n) N8(n + 0) N8(n + 8)
-#define N32(n) N16(n + 0) N16(n + 16)
-#define N64(n) N32(n + 0) N32(n + 32)
-
-	N64(0)
-
-	for (size_t i = 0; i < 32; ++i)
+	int i = 0;
+	uint32_t *ebp = (uint32_t*)esp[3];
+	do
 	{
-		if (ptr[i])
-			printf("[%u] %p\n", i, ptr[i]);
-	}
+		/* XXX: handle iret stack frame */
+		printf("stack: %08lx\n", ebp[1]);
+		ebp = (uint32_t*)ebp[0];
+	} while (ebp[1] >= 0xC0000000 && ++i < 10);
 #endif
 
 infl:
 	sti();
-	__asm__ volatile ("hlt");
+	hlt();
 	goto infl;
 }
 
-void eoi()
+void enable_isa_irq(enum isa_irq_id id)
 {
-	//outb(0x20, 0x20);
-	lapic_eoi();
+	if (has_apic)
+		ioapic_enable_irq(0, id); /* XXX: valid ioapic id */
+	else
+		pic_enable_irq(id);
+}
+
+void disable_isa_irq(enum isa_irq_id id)
+{
+	if (has_apic)
+		ioapic_disable_irq(0, id); /* XXX: valid ioapic id */
+	else
+		pic_disable_irq(id);
+}
+
+void isa_eoi(enum isa_irq_id id)
+{
+	if (has_apic)
+		lapic_eoi(id);
+	else
+		pic_eoi(id);
 }

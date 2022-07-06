@@ -36,6 +36,25 @@ void pic_init(uint8_t offset1, uint8_t offset2)
 	outb(PIC2_DATA, ICW4_8086);
 	io_wait();
 
-	outb(PIC1_DATA, ~0x0);
+	outb(PIC1_DATA, ~0x4); /* always enable PIC2 cascade IRQ */
 	outb(PIC2_DATA, ~0x0);
+}
+
+void pic_enable_irq(enum isa_irq_id id)
+{
+	uint8_t line = id < 8 ? PIC1_DATA : PIC2_DATA;
+	outb(line, inb(line) & ~(1 << g_isa_irq[id % 8]));
+}
+
+void pic_disable_irq(enum isa_irq_id id)
+{
+	uint8_t line = id < 8 ? PIC1_DATA : PIC2_DATA;
+	outb(line, inb(line) | (1 << g_isa_irq[id % 8]));
+}
+
+void pic_eoi(enum isa_irq_id id)
+{
+	if (id >= 8)
+		outb(PIC2_CMD, PIC_EOI);
+	outb(PIC1_CMD, PIC_EOI);
 }

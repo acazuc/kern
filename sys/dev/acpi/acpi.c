@@ -6,6 +6,12 @@
 #include <string.h>
 #include <stdio.h>
 
+/*
+ * Advanced Configuration and Power
+ * Interface (ACPI) Specification
+ * Version 6.3
+ */
+
 struct rsdp
 {
 	char signature[8];
@@ -147,7 +153,7 @@ struct acpi_gas
 	uint8_t bit_offset;
 	uint8_t access_size;
 	uint64_t address;
-};
+} __attribute__ ((packed));
 
 struct fadt
 {
@@ -207,7 +213,17 @@ struct fadt
 	struct acpi_gas sleep_control_reg;
 	struct acpi_gas sleep_status_reg;
 	uint64_t hypervisor_vendor_identity;
-};
+} __attribute__ ((packed));
+
+struct hpet
+{
+	struct acpi_hdr hdr;
+	uint32_t evt_tmr_blk_id;
+	struct acpi_gas base_addr;
+	uint8_t hpet_nb;
+	uint16_t min_clk_ticks;
+	uint8_t oem_attr;
+} __attribute__ ((packed));
 
 /*
  * one local apic per vcpu
@@ -277,7 +293,7 @@ static void handle_madt(const struct madt *madt)
 			{
 				struct madt_int_src_override *src_override = (struct madt_int_src_override*)entry;
 				g_isa_irq[src_override->source] = src_override->gsi;
-				printf("int src override: %d, %lx, %lx\n", src_override->source, src_override->gsi, src_override->flags);
+				printf("int src override: %x, %lx, %x\n", src_override->source, src_override->gsi, src_override->flags);
 				break;
 			}
 			case MADT_LOCAL_APIC_NMI:
@@ -293,6 +309,11 @@ static void handle_madt(const struct madt *madt)
 	} while ((uint8_t*)entry < (uint8_t*)madt + madt->hdr.length);
 }
 
+static void handle_hpet(const struct hpet *hpet)
+{
+	/* XXX */
+}
+
 static void handle_rsdt(const struct rsdt *rsdt)
 {
 	uint8_t checksum = acpi_table_checksum(&rsdt->hdr);
@@ -301,9 +322,12 @@ static void handle_rsdt(const struct rsdt *rsdt)
 	printf("fadt: %p\n", fadt);
 	const struct madt *madt = find_table(rsdt, "APIC");
 	handle_madt(madt);
+	const struct hpet *hpet = find_table(rsdt, "HPET");
+	printf("hpet: %p\n", hpet);
+	handle_hpet(hpet);
 }
 
-void acpi_handle_rsdp(const struct rsdp *rsdp)
+static void handle_rsdp(const struct rsdp *rsdp)
 {
 	uint8_t checksum = 0;
 	for (size_t i = 0; i < sizeof(*rsdp); ++i)
@@ -329,13 +353,24 @@ void acpi_handle_rsdp(const struct rsdp *rsdp)
 	handle_rsdt(rsdt);
 }
 
-const void *acpi_find_rsdp(void)
+static const struct rsdp *find_rsdp(const uint32_t *addr)
 {
-	for (const uint32_t *addr = (const uint32_t*)0xE0000; addr < (const uint32_t*)0x100000; addr += 4)
+	for (uint32_t i = 0; i < 0x8000; ++i)
 	{
-		if (addr[0] != 0x20445352 || addr[1] != 0x20525450)
-			continue;
-		return addr;
+		if (addr[i] == 0x20445352 && addr[i + 1] == 0x20525450)
+			return (const struct rsdp*)&addr[i];
 	}
 	return NULL;
+}
+
+void acpi_init(void)
+{
+	const uint32_t *addr = vmap(0xE0000, 0x20000);
+	assert(addr, "can't vmap bios memory for rsdp");
+	const struct rsdp *rsdp = find_rsdp(addr);
+	if (!rsdp)
+		goto cleanup;
+	handle_rsdp(rsdp);
+cleanup:
+	vunmap((void*)addr, 0x20000);
 }

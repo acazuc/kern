@@ -51,7 +51,7 @@ static uint32_t lapic_get(uint32_t reg)
 	return *(uint32_t volatile*)&g_addr[reg];
 }
 
-void lapic_init()
+void lapic_init(void)
 {
 	uint32_t lo;
 	uint32_t hi;
@@ -63,7 +63,8 @@ void lapic_init()
 	printf("spur iv: %lx\n", lapic_get(LAPIC_REG_SPUR_IV));
 }
 
-void lapic_eoi()
+void lapic_eoi(enum isa_irq_id id)
 {
+	(void)id;
 	lapic_set(LAPIC_REG_EOI, 0);
 }

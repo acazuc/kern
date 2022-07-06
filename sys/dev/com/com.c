@@ -43,11 +43,12 @@ void com_putchar(char c)
 
 static void com_interrupt(void)
 {
-	eoi();
+	isa_eoi(ISA_IRQ_COM1);
 }
 
-void com_init()
+void com_init(void)
 {
 	init_port(COM1);
-	set_irq_handler(g_isa_irq[ISA_IRQ_COM1], com_interrupt);
+	set_isa_irq_handler(ISA_IRQ_COM1, com_interrupt);
+	enable_isa_irq(ISA_IRQ_COM1);
 }

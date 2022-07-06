@@ -12,8 +12,12 @@ CFLAGS = -std=c99 \
          -O2 \
          -Wall \
          -Wextra \
+         -fno-omit-frame-pointer \
+         -mtune=generic \
+         -march=i686 \
          -fno-builtin \
          -fno-stack-protector \
+         -fcf-protection=none \
          -g \
          -fno-pie \
          -fno-pic \
@@ -65,6 +69,7 @@ SRC_NAME = kernel.c \
            dev/acpi/acpi.c \
            dev/apic/ioapic.c \
            dev/apic/lapic.c \
+           dev/rtc/rtc.c \
            lib/string.c \
            lib/printf.c \
            lib/malloc.c \
@@ -125,6 +130,7 @@ $(DISK_FILE):
 	@echo "Creating 100M disk image"
 	@qemu-img create -f qcow2 $@ 100M
 	@echo "Mounting image"
+	@sudo modprobe nbd max_part=8
 	@sudo qemu-nbd --connect=/dev/nbd0 disk.qcow2
 	@echo "Formatting fat32"
 	@sudo mkfs.fat /dev/nbd0

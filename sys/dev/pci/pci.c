@@ -70,7 +70,7 @@ static void checkdev(uint8_t bus, uint8_t slot, uint8_t func)
 	printf("%02x:%02x.%01x %08lx %08lx %08lx %08lx %s\n", bus, slot, func, header.v0, header.v4, header.v8, header.vC, name);
 }
 
-void pci_init()
+void pci_init(void)
 {
 	for (uint32_t bus = 0; bus < 256; ++bus)
 	{

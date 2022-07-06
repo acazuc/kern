@@ -271,7 +271,8 @@ static uint32_t get_scancode(enum kbd_key key, uint32_t mods)
 
 void ps2_init()
 {
-	set_irq_handler(g_isa_irq[ISA_IRQ_KBD], kbd_interrupt);
+	set_isa_irq_handler(ISA_IRQ_KBD, kbd_interrupt);
+	enable_isa_irq(ISA_IRQ_KBD);
 }
 
 static void kbd_interrupt(void)
@@ -355,5 +356,5 @@ static void kbd_interrupt(void)
 		}
 	}
 end:
-	eoi();
+	isa_eoi(ISA_IRQ_KBD);
 }
