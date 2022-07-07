@@ -458,12 +458,21 @@ static int (*g_syscalls[])() =
 	[SYS_GETDENTS]  = sys_getdents,
 };
 
-uint32_t call_sys(uint32_t *args)
+void call_sys(const struct int_ctx *ctx)
 {
-	uint32_t id = args[0];
+	uint32_t id = ctx->frame.eax;
+	uint32_t ret;
 	if (id >= sizeof(g_syscalls) / sizeof(*g_syscalls))
-		return -ENOSYS;
+	{
+		ret = -ENOSYS;
+		goto end;
+	}
 	if (!g_syscalls[id])
-		return -ENOSYS;
-	return g_syscalls[id](args[1], args[2], args[3], args[4], args[5], args[6]);
+	{
+		ret = -ENOSYS;
+		goto end;
+	}
+	ret = g_syscalls[id](ctx->frame.ebx, ctx->frame.ecx, ctx->frame.edx, ctx->frame.esi, ctx->frame.edi, ctx->frame.ebp);
+end:
+	curthread->frame.eax = ret;
 }

@@ -71,7 +71,7 @@ void ioapic_enable_irq(uint8_t id, enum isa_irq_id irqid)
 	struct ioapic *ioapic = g_ioapics[id];
 	assert(ioapic, "ioapic is NULL");
 	uint32_t reg_base = IOAPIC_REG_REDTBL + g_isa_irq[irqid] * 2;
-	ioapic_wr(ioapic, reg_base + 0, g_isa_irq[irqid] + 32);
+	ioapic_wr(ioapic, reg_base + 0, g_isa_irq[irqid] + 32); /* XXX: set logical mode */
 	ioapic_wr(ioapic, reg_base + 1, 0xFF << 24); /* XXX: set cpu mask ? */
 }
 

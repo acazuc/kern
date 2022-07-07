@@ -12,8 +12,10 @@
 #include "x86.h"
 #include "asm.h"
 
+#include <sys/sched.h>
 #include <multiboot.h>
 #include <sys/file.h>
+#include <sys/proc.h>
 #include <inttypes.h>
 #include <string.h>
 #include <stdio.h>
@@ -22,6 +24,8 @@
 int g_isa_irq[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
 
 static int has_apic; /* XXX */
+
+void userland(void);
 
 enum cpuid_feature
 {
@@ -285,12 +289,22 @@ static void tty_init(void)
 		int res = tty_create_vga(name, i, &ttys[i]);
 		if (res)
 			printf("can't create %s: %s", name, strerror(res));
+		if (!i)
+			curtty = ttys[0];
+		printf("ok %u\n", i);
 	}
-	curtty = ttys[0];
+}
+
+static void idle_loop()
+{
+	sti();
+	while (1)
+		hlt();
 }
 
 void boot(struct multiboot_info *mb_info)
 {
+	cli();
 	vga_init();
 	printf("\n");
 	printf("x86 boot @ %p\n", boot);
@@ -318,7 +332,18 @@ void boot(struct multiboot_info *mb_info)
 	com_init();
 	ps2_init();
 	ide_init();
-	sti();
+	sched_init();
+	struct thread *idle_thread = kproc_create("idle", idle_loop);
+	idle_thread->pri = 255;
+	sched_add(idle_thread);
+	curthread = idle_thread;
+	curproc = curthread->proc;
+	struct thread *thread = uproc_create("init", userland);
+	sched_add(thread);
+	idle_loop();
+	panic("post idle loop\n");
+
+#if 0
 	while (1)
 	{
 		struct timespec pit_ts;
@@ -329,6 +354,7 @@ void boot(struct multiboot_info *mb_info)
 		int64_t rtc_t = rtc_ts.tv_sec * 1000000000LL + rtc_ts.tv_nsec;
 		//printf("diff: %lld (%010lld / %010lld)\n", (pit_t - rtc_t) / 1000, pit_t, rtc_t);
 	}
+#endif
 
 #if 0
 	uint8_t buf[512];
@@ -362,7 +388,7 @@ void x86_panic(uint32_t *esp, const char *file, const char *line, const char *fn
 #endif
 
 infl:
-	sti();
+	cli();
 	hlt();
 	goto infl;
 }

@@ -41,8 +41,9 @@ void com_putchar(char c)
 	outb(COM1, c);
 }
 
-static void com_interrupt(void)
+static void com_interrupt(const struct int_ctx *ctx)
 {
+	(void)ctx;
 	isa_eoi(ISA_IRQ_COM1);
 }
 

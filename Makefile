@@ -1,10 +1,14 @@
+ASM = nasm
+
+AS = as
+
 CC = gcc
 
-ASM = nasm -f elf32
-
-AS = as --32
-
 LD = gcc
+
+ASFLAGS = --32
+
+ASMFLAGS = -f elf32
 
 CFLAGS = -std=c99 \
          -m32 \
@@ -78,6 +82,8 @@ SRC_NAME = kernel.c \
            fs/vfs.c \
            fs/devfs/devfs.c \
            fs/ramfs/ramfs.c \
+           kern/sched.c \
+           kern/proc.c \
 
 SRC_PATH = sys
 
@@ -96,17 +102,17 @@ all: $(ISO_NAME)
 $(OBJ_PATH)/%.c.o: $(SRC_PATH)/%.c
 	@mkdir -p $(dir $@)
 	@echo "CC $<"
-	@$(CC) -c $< -o $@ $(CFLAGS)
+	@$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJ_PATH)/%.s.o: $(SRC_PATH)/%.s
 	@mkdir -p $(dir $@)
 	@echo "ASM $<"
-	@$(ASM) $< -o $@
+	@$(ASM) $(ASMFLAGS) $< -o $@
 
 $(OBJ_PATH)/%.S.o: $(SRC_PATH)/%.S
 	@mkdir -p $(dir $@)
 	@echo "AS $<"
-	@$(AS) $< -o $@
+	@$(AS) $(ASFLAGS) $< -o $@
 
 $(BIN):
 	@make MKDIR=$(PWD)/mk -C $(BIN)
@@ -119,7 +125,7 @@ $(LDFILE):
 $(BIN_NAME): $(OBJ) $(LDFILE)
 	@mkdir -p $(dir $@)
 	@echo "LD $@"
-	@$(LD) -T $(LDFILE) -o $@ $(LDFLAGS) $(OBJ) -lgcc
+	@$(LD) $(LDFLAGS) -T $(LDFILE) -o $@ $(OBJ) -lgcc
 
 $(ISO_NAME): $(BIN_NAME)
 	@mkdir -p $(dir $<)

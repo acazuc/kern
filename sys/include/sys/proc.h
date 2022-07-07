@@ -1,6 +1,7 @@
 #ifndef SYS_PROC_H
 #define SYS_PROC_H
 
+#include "arch/x86/x86.h"
 #include <sys/queue.h>
 #include <sys/types.h>
 
@@ -11,6 +12,7 @@ struct filedesc;
 struct proc
 {
 	struct vmm_ctx *vmm_ctx;
+	char *name;
 	void *entrypoint;
 	struct filedesc *files;
 	uint32_t files_nb;
@@ -27,14 +29,31 @@ struct proc
 	gid_t gid;
 	gid_t egid;
 	gid_t sgid;
-	LIST_HEAD(, thread) threads;
+	pri_t pri;
+	TAILQ_HEAD(, thread) threads;
+	TAILQ_ENTRY(proc) sched_chain;
+};
+
+enum thread_state
+{
+	THREAD_RUNNING, /* currently executed */
+	THREAD_PAUSED,  /* paused by scheduler */
+	THREAD_WAITING, /* waiting for lock */
 };
 
 struct thread
 {
 	struct proc *proc;
-	LIST_ENTRY(thread) thread_chain;
+	enum thread_state state;
+	struct arch_framectx frame;
+	pid_t tid;
+	pri_t pri;
+	TAILQ_ENTRY(thread) sched_chain;
+	TAILQ_ENTRY(thread) thread_chain;
 };
+
+struct thread *uproc_create(const char *name, void *entry);
+struct thread *kproc_create(const char *name, void *entry);
 
 extern struct proc *curproc;
 extern struct thread *curthread;

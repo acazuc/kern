@@ -3,6 +3,7 @@
 
 enum device_type
 {
+	DEVICE_TIMER,
 };
 
 struct dev_s

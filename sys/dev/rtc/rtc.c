@@ -15,7 +15,7 @@
 
 static struct timespec g_ts;
 
-static void rtc_interrupt(void);
+static void rtc_interrupt(const struct int_ctx *ctx);
 
 static inline uint8_t rdreg(uint8_t reg)
 {
@@ -37,8 +37,9 @@ void rtc_init(void)
 	enable_isa_irq(ISA_IRQ_CMOS);
 }
 
-static void rtc_interrupt(void)
+static void rtc_interrupt(const struct int_ctx *ctx)
 {
+	(void)ctx;
 	g_ts.tv_nsec += RTC_INC;
 	if (g_ts.tv_nsec >= 1000000000)
 	{

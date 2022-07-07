@@ -225,12 +225,10 @@ struct {								\
 #define SLIST_REMOVE_AFTER(elm, field) do {				\
 	SLIST_NEXT(elm, field) =					\
 	    SLIST_NEXT(SLIST_NEXT(elm, field), field);			\
-	TRASHIT(*oldnext);						\
 } while (0)
 
 #define	SLIST_REMOVE_HEAD(head, field) do {				\
 	SLIST_FIRST((head)) = SLIST_NEXT(SLIST_FIRST((head)), field);	\
-	TRASHIT(*oldnext);						\
 } while (0)
 
 #define	SLIST_REMOVE_PREVPTR(prevp, elm, field) do {			\
@@ -349,7 +347,6 @@ struct {								\
 			curelm = STAILQ_NEXT(curelm, field);		\
 		STAILQ_REMOVE_AFTER(head, curelm, field);		\
 	}								\
-	TRASHIT(*oldnext);						\
 } while (0)
 
 #define STAILQ_REMOVE_AFTER(head, elm, field) do {			\
@@ -491,8 +488,6 @@ struct {								\
 		LIST_NEXT((elm), field)->field.le_prev = 		\
 		    (elm)->field.le_prev;				\
 	*(elm)->field.le_prev = LIST_NEXT((elm), field);		\
-	TRASHIT(*oldnext);						\
-	TRASHIT(*oldprev);						\
 } while (0)
 
 #define LIST_SWAP(head1, head2, type, field) do {			\
@@ -514,31 +509,27 @@ struct {								\
 struct name {								\
 	struct type *tqh_first;	/* first element */			\
 	struct type **tqh_last;	/* addr of last next element */		\
-	TRACEBUF							\
 }
 
 #define	TAILQ_CLASS_HEAD(name, type)					\
 struct name {								\
 	class type *tqh_first;	/* first element */			\
 	class type **tqh_last;	/* addr of last next element */		\
-	TRACEBUF							\
 }
 
 #define	TAILQ_HEAD_INITIALIZER(head)					\
-	{ NULL, &(head).tqh_first, TRACEBUF_INITIALIZER }
+	{ NULL, &(head).tqh_first }
 
 #define	TAILQ_ENTRY(type)						\
 struct {								\
 	struct type *tqe_next;	/* next element */			\
 	struct type **tqe_prev;	/* address of previous next element */	\
-	TRACEBUF							\
 }
 
 #define	TAILQ_CLASS_ENTRY(type)						\
 struct {								\
 	class type *tqe_next;	/* next element */			\
 	class type **tqe_prev;	/* address of previous next element */	\
-	TRACEBUF							\
 }
 
 #define	TAILQ_CONCAT(head1, head2, field) do {				\
@@ -664,8 +655,6 @@ struct {								\
 		(head)->tqh_last = (elm)->field.tqe_prev;		\
 	}								\
 	*(elm)->field.tqe_prev = TAILQ_NEXT((elm), field);		\
-	TRASHIT(*oldnext);						\
-	TRASHIT(*oldprev);						\
 } while (0)
 
 #define TAILQ_SWAP(head1, head2, type, field) do {			\

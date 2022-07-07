@@ -31,7 +31,7 @@
 
 static struct timespec g_ts;
 
-static void pit_interrupt(void);
+static void pit_interrupt(const struct int_ctx *ctx);
 
 void pit_init()
 {
@@ -42,8 +42,9 @@ void pit_init()
 	enable_isa_irq(ISA_IRQ_PIT);
 }
 
-static void pit_interrupt(void)
+static void pit_interrupt(const struct int_ctx *ctx)
 {
+	(void)ctx;
 	g_ts.tv_nsec += PIT_INC;
 	if (g_ts.tv_nsec >= 1000000000)
 	{

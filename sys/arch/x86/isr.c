@@ -1,89 +1,87 @@
 #include "x86.h"
 #include "asm.h"
 
+#include <sys/sched.h>
+#include <sys/proc.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <errno.h>
 
-struct exception_ctx
-{
-	uint32_t eip;
-	uint32_t err;
-};
+static int_handler_t g_interrupt_handlers[256];
 
-static void (*g_exception_handlers[256])(struct exception_ctx *ctx);
-
-static void handle_divide_by_zero(struct exception_ctx *ctx)
+static void handle_divide_by_zero(const struct int_ctx *ctx)
 {
-	panic("divide by zero @ 0x%08lx\n", ctx->eip);
+	panic("divide by zero @ 0x%08lx\n", ctx->frame.eip);
 }
 
-static void handle_debug(struct exception_ctx *ctx)
+static void handle_debug(const struct int_ctx *ctx)
 {
-	panic("debug @ 0x%08lx\n", ctx->eip);
+	panic("debug @ 0x%08lx\n", ctx->frame.eip);
 }
 
-static void handle_nmi(struct exception_ctx *ctx)
+static void handle_nmi(const struct int_ctx *ctx)
 {
-	panic("non maskable interrupt @ 0x%08lx\n", ctx->eip);
+	uint8_t scpa = inb(0x92);
+	uint8_t scpb = inb(0x61);
+	panic("non maskable interrupt @ 0x%08lx (%02x, %02x)\n", ctx->frame.eip, scpa, scpb);
 }
 
-static void handle_breakpoint(struct exception_ctx *ctx)
+static void handle_breakpoint(const struct int_ctx *ctx)
 {
-	panic("breakpoint @ 0x%08lx\n", ctx->eip);
+	panic("breakpoint @ 0x%08lx\n", ctx->frame.eip);
 }
 
-static void handle_overflow(struct exception_ctx *ctx)
+static void handle_overflow(const struct int_ctx *ctx)
 {
-	panic("overflow @ 0x%08lx\n", ctx->eip);
+	panic("overflow @ 0x%08lx\n", ctx->frame.eip);
 }
 
-static void handle_bound_range_exceeded(struct exception_ctx *ctx)
+static void handle_bound_range_exceeded(const struct int_ctx *ctx)
 {
-	panic("bound range exceeded @ 0x%08lx\n", ctx->eip);
+	panic("bound range exceeded @ 0x%08lx\n", ctx->frame.eip);
 }
 
-static void handle_invalid_opcode(struct exception_ctx *ctx)
+static void handle_invalid_opcode(const struct int_ctx *ctx)
 {
-	panic("invalid opcode @ 0x%08lx\n", ctx->eip);
+	panic("invalid opcode @ 0x%08lx\n", ctx->frame.eip);
 }
 
-static void handle_device_not_available(struct exception_ctx *ctx)
+static void handle_device_not_available(const struct int_ctx *ctx)
 {
-	panic("device not available @ 0x%08lx\n", ctx->eip);
+	panic("device not available @ 0x%08lx\n", ctx->frame.eip);
 }
 
-static void handle_double_fault(struct exception_ctx *ctx)
+static void handle_double_fault(const struct int_ctx *ctx)
 {
-	panic("double fault: 0x%lx @ 0x%08lx\n", ctx->err, ctx->eip);
+	panic("double fault: 0x%lx @ 0x%08lx\n", ctx->err, ctx->frame.eip);
 }
 
-static void handle_coprocessor_segment_overrun(struct exception_ctx *ctx)
+static void handle_coprocessor_segment_overrun(const struct int_ctx *ctx)
 {
-	panic("coprocessor segment overrun @ 0x%08lx\n", ctx->eip);
+	panic("coprocessor segment overrun @ 0x%08lx\n", ctx->frame.eip);
 }
 
-static void handle_invalid_tss(struct exception_ctx *ctx)
+static void handle_invalid_tss(const struct int_ctx *ctx)
 {
-	panic("invalid tss: 0x%lx @ 0x%08lx\n", ctx->err, ctx->eip);
+	panic("invalid tss: 0x%lx @ 0x%08lx\n", ctx->err, ctx->frame.eip);
 }
 
-static void handle_segment_not_present(struct exception_ctx *ctx)
+static void handle_segment_not_present(const struct int_ctx *ctx)
 {
-	panic("segment not present: 0x%lx @ 0x%08lx\n", ctx->err, ctx->eip);
+	panic("segment not present: 0x%lx @ 0x%08lx\n", ctx->err, ctx->frame.eip);
 }
 
-static void handle_stack_segment_fault(struct exception_ctx *ctx)
+static void handle_stack_segment_fault(const struct int_ctx *ctx)
 {
-	panic("stack segment fault: 0x%lx @ 0x%08lx\n", ctx->err, ctx->eip);
+	panic("stack segment fault: 0x%lx @ 0x%08lx\n", ctx->err, ctx->frame.eip);
 }
 
-static void handle_general_protection_fault(struct exception_ctx *ctx)
+static void handle_general_protection_fault(const struct int_ctx *ctx)
 {
-	panic("general protection fault: 0x%lx @ 0x%08lx\n", ctx->err, ctx->eip);
+	panic("general protection fault: 0x%lx @ 0x%08lx\n", ctx->err, ctx->frame.eip);
 }
 
-static void handle_page_fault(struct exception_ctx *ctx)
+static void handle_page_fault(const struct int_ctx *ctx)
 {
 	uint32_t page_addr;
 	__asm__ volatile ("mov %%cr2, %0" : "=a"(page_addr));
@@ -92,70 +90,75 @@ static void handle_page_fault(struct exception_ctx *ctx)
 		paging_alloc(page_addr);
 		return;
 	}
-	panic("page protection violation addr 0x%08lx: 0x%08lx @ 0x%08lx\n", page_addr, ctx->err, ctx->eip);
+	panic("page protection violation addr 0x%08lx: 0x%08lx @ 0x%08lx\n", page_addr, ctx->err, ctx->frame.eip);
 }
 
-static void handle_x87_fpe(struct exception_ctx *ctx)
+static void handle_x87_fpe(const struct int_ctx *ctx)
 {
-	panic("x87 fpe @ 0x%08lx\n", ctx->eip);
+	panic("x87 fpe @ 0x%08lx\n", ctx->frame.eip);
 }
 
-static void handle_alignment_check(struct exception_ctx *ctx)
+static void handle_alignment_check(const struct int_ctx *ctx)
 {
-	panic("alignment check @ 0x%08lx\n", ctx->eip);
+	panic("alignment check @ 0x%08lx\n", ctx->frame.eip);
 }
 
-static void handle_machine_check(struct exception_ctx *ctx)
+static void handle_machine_check(const struct int_ctx *ctx)
 {
-	panic("machine check @ 0x%08lx\n", ctx->eip);
+	panic("machine check @ 0x%08lx\n", ctx->frame.eip);
 }
 
-static void handle_simd_fpe(struct exception_ctx *ctx)
+static void handle_simd_fpe(const struct int_ctx *ctx)
 {
-	panic("simd fpe @ 0x%08lx\n", ctx->eip);
+	panic("simd fpe @ 0x%08lx\n", ctx->frame.eip);
 }
 
-static void handle_virtualization_exception(struct exception_ctx *ctx)
+static void handle_virtualization_exception(const struct int_ctx *ctx)
 {
-	panic("virtualization exception @ 0x%08lx\n", ctx->eip);
+	panic("virtualization exception @ 0x%08lx\n", ctx->frame.eip);
 }
 
-static void handle_control_protection_exception(struct exception_ctx *ctx)
+static void handle_control_protection_exception(const struct int_ctx *ctx)
 {
-	panic("control protection exception @ 0x%08lx\n", ctx->eip);
+	panic("control protection exception @ 0x%08lx\n", ctx->frame.eip);
 }
 
-static void handle_hypervisor_injection_exception(struct exception_ctx *ctx)
+static void handle_hypervisor_injection_exception(const struct int_ctx *ctx)
 {
-	panic("hypervisor injection exception @ 0x%08lx\n", ctx->eip);
+	panic("hypervisor injection exception @ 0x%08lx\n", ctx->frame.eip);
 }
 
-static void handle_vmm_communication_exception(struct exception_ctx *ctx)
+static void handle_vmm_communication_exception(const struct int_ctx *ctx)
 {
-	panic("vmm communication exception @ 0x%08lx\n", ctx->eip);
+	panic("vmm communication exception @ 0x%08lx\n", ctx->frame.eip);
 }
 
-static void handle_security_exception(struct exception_ctx *ctx)
+static void handle_security_exception(const struct int_ctx *ctx)
 {
-	panic("security exception @ 0x%08lx\n", ctx->eip);
+	panic("security exception @ 0x%08lx\n", ctx->frame.eip);
 }
 
-static void handle_syscall(struct exception_ctx *ctx)
+static void handle_syscall(const struct int_ctx *ctx)
 {
-	uint32_t *args = (uint32_t*)ctx;
-	args[0] = call_sys(args + 1);
+	call_sys(ctx);
 }
 
-void handle_exception(uint32_t id, struct exception_ctx *ctx)
+void handle_interrupt(uint32_t id, struct int_ctx *ctx)
 {
+	curthread->frame = ctx->frame;
+	uint32_t eip = ctx->frame.eip;
 	if (id >= 256)
-		panic("invalid exception id: 0x%08lx @ 0x%08lx (err: 0x%08lx)\n", id, ctx->eip, ctx->err);
-	if (!g_exception_handlers[id])
-		panic("unhandled exception 0x%02lx @ 0x%08lx (err: 0x%08lx)\n", id, ctx->eip, ctx->err);
-	g_exception_handlers[id](ctx);
+		panic("invalid interrupt id: 0x%08lx @ 0x%08lx (err: 0x%08lx)\n", id, ctx->frame.eip, ctx->err);
+	if (!g_interrupt_handlers[id])
+		panic("unhandled interrupt 0x%02lx @ 0x%08lx (err: 0x%08lx)\n", id, ctx->frame.eip, ctx->err);
+	g_interrupt_handlers[id](ctx);
+	sched_tick();
+	ctx->frame = curthread->frame;
+	if (ctx->frame.eip != eip)
+		printf("eip from %lx to %lx\n", eip, ctx->frame.eip);
 }
 
-static void (*g_exception_handlers[256])(struct exception_ctx*) =
+static int_handler_t g_interrupt_handlers[256] =
 {
 	[0x0]  = handle_divide_by_zero,
 	[0x1]  = handle_debug,
@@ -184,11 +187,11 @@ static void (*g_exception_handlers[256])(struct exception_ctx*) =
 	[0x80] = handle_syscall,
 };
 
-int set_isa_irq_handler(enum isa_irq_id irq_id, void (*handler)(void))
+void set_isa_irq_handler(enum isa_irq_id irq_id, int_handler_t handler)
 {
 	int id = g_isa_irq[irq_id];
-	if (id < 0 || id >= 0x20 || g_exception_handlers[0x20 + id])
-		return EINVAL;
-	g_exception_handlers[0x20 + id] = (void*)handler;
-	return 0;
+	assert(id > 0, "negative ISA IRQ id");
+	assert(id < 0x20, "ISA IRQ id >= 0x20");
+	assert(!g_interrupt_handlers[0x20 + id], "ISA IRQ handler already set");
+	g_interrupt_handlers[0x20 + id] = handler;
 }

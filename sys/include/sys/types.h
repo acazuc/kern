@@ -14,6 +14,7 @@ typedef uint32_t dev_t;
 typedef uint32_t nlink_t;
 typedef uint32_t blksize_t;
 typedef uint32_t blkcnt_t;
+typedef uint32_t pri_t;
 
 #define major(n) ((n) << 8)
 #define minor(n) (n)

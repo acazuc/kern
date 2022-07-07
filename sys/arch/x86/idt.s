@@ -1,4 +1,21 @@
-load_segments:
+isr_common:
+	;save ctx
+	push dword [esp + 1 * 4] ;err
+	push dword [esp + 5 * 4] ;ef
+	push dword [esp + 8 * 4] ;ss
+	push gs
+	push fs
+	push es
+	push ds
+	push dword [esp + 10 * 4] ;cs
+	push dword [esp + 10 * 4] ;eip
+	push ebp
+	push dword [esp + 15 * 4] ;esp
+	push edi
+	push esi
+	push edx
+	push ecx
+	push ebx
 	push eax
 	mov ax, 0x10
 	mov ds, ax
@@ -6,37 +23,39 @@ load_segments:
 	mov fs, ax
 	mov gs, ax
 	mov ss, ax
-	pop eax
-	ret
-
-isr_common:
-	;save ctx
-	push gs
-	push fs
-	push es
-	push ds
-	pushad
-	call load_segments
 
 	;call handler
-	mov eax, [esp + 13 * 4]
-	push eax
-	mov eax, [esp + 15 * 4]
-	push eax
 	push esp
-	mov eax, [esp + 15 * 4]
-	push eax
+	push dword [esp + 18 * 4] ;id
 	cld
-	call handle_exception
-	add esp, 0x10
+	call handle_interrupt
+	add esp, 8
 
 	;restore ctx
-	popad
+	mov eax, [esp + 9 * 4]
+	mov [esp + 20 * 4], eax ;cs
+	mov eax, [esp + 14 * 4]
+	mov [esp + 23 * 4], eax ;ss
+	mov eax, [esp + 6 * 4]
+	mov [esp + 22 * 4], eax ;esp
+	mov eax, [esp + 8 * 4]
+	mov [esp + 19 * 4], eax ;eip
+	mov eax, [esp + 15 * 4]
+	mov [esp + 21 * 4], eax ;ef
+	pop eax
+	pop ebx
+	pop ecx
+	pop edx
+	pop esi
+	pop edi
+	add esp, 4 ;esp
+	pop ebp
+	add esp, 8 ;eip, cs
 	pop ds
 	pop es
 	pop fs
 	pop gs
-	add esp, 0x8
+	add esp, 20 ;ss, ef, err, id, err
 	iret
 
 %macro isr_err 1
@@ -54,44 +73,7 @@ isr_%+%1:
 	jmp isr_common
 %endmacro
 
-isr_128:
-	cli
-
-	;save ctx
-	pushad
-	push gs
-	push fs
-	push es
-	push ds
-	call load_segments
-
-	;call handler
-	push ebp
-	push edi
-	push esi
-	push edx
-	push ecx
-	push ebx
-	push eax
-	sub esp, 4
-	push esp
-	push 128
-	cld
-	call handle_exception
-	add esp, 2 * 4
-	pop eax
-	mov [esp + 18 * 4], eax
-	add esp, 7 * 4
-
-	;restore ctx
-	pop ds
-	pop es
-	pop fs
-	pop gs
-	popad
-	iret
-
-extern handle_exception
+extern handle_interrupt
 
 isr_no_err 0
 isr_no_err 1
@@ -149,9 +131,7 @@ isr_no_err 47
 ;others
 %assign i 48
 %rep 208
-%if i != 0x80
 	isr_no_err i
-%endif
 %assign i i+1
 %endrep
 

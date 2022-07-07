@@ -256,7 +256,7 @@ static size_t g_kbd_buffer_size;
 
 static enum kbd_mod g_kbd_mods;
 
-static void kbd_interrupt(void);
+static void kbd_interrupt(const struct int_ctx *ctx);
 
 static uint32_t get_scancode(enum kbd_key key, uint32_t mods)
 {
@@ -275,8 +275,9 @@ void ps2_init()
 	enable_isa_irq(ISA_IRQ_KBD);
 }
 
-static void kbd_interrupt(void)
+static void kbd_interrupt(const struct int_ctx *ctx)
 {
+	(void)ctx;
 	uint8_t c = inb(0x60);
 	if (c == 0xE0)
 	{
@@ -345,6 +346,7 @@ static void kbd_interrupt(void)
 		if (char_evt.scancode)
 		{
 			char *dst = (char*)char_evt.utf8;
+			memset(char_evt.utf8, 0, sizeof(char_evt.utf8));
 			if (utf8_encode(&dst, char_evt.scancode))
 			{
 				tty_input(curtty, char_evt.utf8, strlen(char_evt.utf8));
