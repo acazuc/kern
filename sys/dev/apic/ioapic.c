@@ -61,8 +61,10 @@ void ioapic_init(uint8_t id)
 	struct ioapic *ioapic = g_ioapics[id];
 	assert(ioapic, "ioapic is NULL");
 	ioapic->data = vmap(0xFEC00000 + id * 0x100, 4096); /* XXX: use addr from ACPI */
+#if 0
 	printf("ioapic id: 0x%lx\n", ioapic_rd(ioapic, IOAPIC_REG_ID));
 	printf("ioapic version: 0x%lx\n", ioapic_rd(ioapic, IOAPIC_REG_VER));
+#endif
 }
 
 void ioapic_enable_irq(uint8_t id, enum isa_irq_id irqid)

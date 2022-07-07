@@ -280,26 +280,34 @@ static void handle_madt(const struct madt *madt)
 			case MADT_LOCAL_APIC:
 			{
 				struct madt_local_apic *local_apic = (struct madt_local_apic*)entry;
+#if 0
 				printf("local apic: %u %u %lx\n", local_apic->acpi_cpuid, local_apic->apic_id, local_apic->flags);
+#endif
 				break;
 			}
 			case MADT_IO_APIC:
 			{
 				struct madt_io_apic *io_apic = (struct madt_io_apic*)entry;
+#if 0
 				printf("io apic: %u, %lx, %lx\n", io_apic->apic_id, io_apic->apic_addr, io_apic->gsib);
+#endif
 				break;
 			}
 			case MADT_INT_SRC_OVERRIDE:
 			{
 				struct madt_int_src_override *src_override = (struct madt_int_src_override*)entry;
 				g_isa_irq[src_override->source] = src_override->gsi;
+#if 0
 				printf("int src override: %x, %lx, %x\n", src_override->source, src_override->gsi, src_override->flags);
+#endif
 				break;
 			}
 			case MADT_LOCAL_APIC_NMI:
 			{
 				struct madt_local_apic_nmi *apic_nmi = (struct madt_local_apic_nmi*)entry;
+#if 0
 				printf("local apic nmi: \n");
+#endif
 				break;
 			}
 			default:
@@ -319,11 +327,18 @@ static void handle_rsdt(const struct rsdt *rsdt)
 	uint8_t checksum = acpi_table_checksum(&rsdt->hdr);
 	assert(!checksum, "invalid rsdt checksum: %02x\n", checksum);
 	const struct fadt *fadt = find_table(rsdt, "FACP");
+#if 0
 	printf("fadt: %p\n", fadt);
+#endif
 	const struct madt *madt = find_table(rsdt, "APIC");
+#if 0
+	printf("madt: %p\n", madt);
+#endif
 	handle_madt(madt);
 	const struct hpet *hpet = find_table(rsdt, "HPET");
+#if 0
 	printf("hpet: %p\n", hpet);
+#endif
 	handle_hpet(hpet);
 }
 

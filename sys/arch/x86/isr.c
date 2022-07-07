@@ -16,7 +16,8 @@ static void handle_divide_by_zero(const struct int_ctx *ctx)
 
 static void handle_debug(const struct int_ctx *ctx)
 {
-	panic("debug @ 0x%08lx\n", ctx->frame.eip);
+	uint32_t dr6 = getdr6();
+	panic("debug @ 0x%08lx (%08lx)\n", ctx->frame.eip, dr6);
 }
 
 static void handle_nmi(const struct int_ctx *ctx)
@@ -146,7 +147,6 @@ static void handle_syscall(const struct int_ctx *ctx)
 void handle_interrupt(uint32_t id, struct int_ctx *ctx)
 {
 	curthread->frame = ctx->frame;
-	uint32_t eip = ctx->frame.eip;
 	if (id >= 256)
 		panic("invalid interrupt id: 0x%08lx @ 0x%08lx (err: 0x%08lx)\n", id, ctx->frame.eip, ctx->err);
 	if (!g_interrupt_handlers[id])
@@ -154,8 +154,6 @@ void handle_interrupt(uint32_t id, struct int_ctx *ctx)
 	g_interrupt_handlers[id](ctx);
 	sched_tick();
 	ctx->frame = curthread->frame;
-	if (ctx->frame.eip != eip)
-		printf("eip from %lx to %lx\n", eip, ctx->frame.eip);
 }
 
 static int_handler_t g_interrupt_handlers[256] =

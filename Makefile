@@ -97,7 +97,7 @@ OBJ_PATH = obj
 
 OBJ = $(addprefix $(OBJ_PATH)/, $(OBJ_NAME))
 
-all: $(ISO_NAME)
+all: $(BIN_NAME)
 
 $(OBJ_PATH)/%.c.o: $(SRC_PATH)/%.c
 	@mkdir -p $(dir $@)

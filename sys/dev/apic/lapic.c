@@ -56,11 +56,17 @@ void lapic_init(void)
 	uint32_t lo;
 	uint32_t hi;
 	rdmsr(IA32_APIC_BASE, &hi, &lo);
+#if 0
 	printf("lo: %lx, hi: %lx\n", lo, hi);
+#endif
 	g_addr = vmap(0xFEE00000, 4096);
+#if 0
 	printf("spur iv: %lx\n", lapic_get(LAPIC_REG_SPUR_IV));
+#endif
 	lapic_set(LAPIC_REG_SPUR_IV, lapic_get(LAPIC_REG_SPUR_IV) | 0x100);
+#if 0
 	printf("spur iv: %lx\n", lapic_get(LAPIC_REG_SPUR_IV));
+#endif
 }
 
 void lapic_eoi(enum isa_irq_id id)

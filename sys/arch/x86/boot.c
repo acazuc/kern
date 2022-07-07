@@ -289,17 +289,17 @@ static void tty_init(void)
 		int res = tty_create_vga(name, i, &ttys[i]);
 		if (res)
 			printf("can't create %s: %s", name, strerror(res));
-		if (!i)
-			curtty = ttys[0];
-		printf("ok %u\n", i);
 	}
+	curtty = ttys[0];
 }
 
 static void idle_loop()
 {
-	sti();
 	while (1)
+	{
+		sti();
 		hlt();
+	}
 }
 
 void boot(struct multiboot_info *mb_info)

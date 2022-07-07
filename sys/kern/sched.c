@@ -1,5 +1,6 @@
 #include <sys/proc.h>
 #include <stddef.h>
+#include <stdio.h>
 
 static TAILQ_HEAD(, thread) g_threads; /* prio-ordered */
 
@@ -28,7 +29,9 @@ void sched_rm(struct thread *thread)
 
 static void change_thread(struct thread *thread)
 {
+#if 0
 	printf("changing thread from %p (%s) to %p (%s)\n", curthread, curthread->proc->name, thread, thread->proc->name);
+#endif
 	curthread->state = THREAD_PAUSED;
 	curthread = thread;
 	curproc = thread->proc;
@@ -62,7 +65,9 @@ void sched_tick(void)
 	struct thread *thread = NULL;
 	TAILQ_FOREACH(thread, &g_threads, sched_chain)
 	{
-		if (thread->pri >= curthread->pri)
+		if (thread == curthread)
+			continue;
+		if (thread->pri > curthread->pri)
 			return;
 		if (thread->state == THREAD_PAUSED)
 			break;

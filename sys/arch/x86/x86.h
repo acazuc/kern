@@ -64,7 +64,6 @@ void paging_init(uint32_t addr, uint32_t size);
 void paging_alloc(uint32_t addr);
 void paging_dumpinfo(void);
 void x86_panic(uint32_t *esp, const char *file, const char *line, const char *fn, const char *fmt, ...)  __attribute__((format(printf, 5, 6)));
-void usermode(struct arch_framectx *ctx);
 void call_sys(const struct int_ctx *ctx);
 void set_isa_irq_handler(enum isa_irq_id irq, int_handler_t handler);
 void enable_isa_irq(enum isa_irq_id id);

@@ -1,4 +1,4 @@
-BIN = sh
+BIN = cat
 
 SRC = main.c
 

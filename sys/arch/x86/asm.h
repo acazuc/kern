@@ -81,7 +81,14 @@ static inline void repoutsw(void *dst, void *src, uint32_t n)
 static inline uint32_t getef(void)
 {
 	uint32_t ret;
-	__asm__ volatile ("pushf; mov %0, (%%esp); add $4, %%esp" : "=a"(ret));
+	__asm__ volatile ("pushf; mov (%%esp), %0; add $4, %%esp" : "=a"(ret));
+	return ret;
+}
+
+static inline uint32_t getdr6(void)
+{
+	uint32_t ret;
+	__asm__ volatile ("mov %%dr6, %0" : "=a"(ret));
 	return ret;
 }
 

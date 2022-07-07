@@ -66,7 +66,7 @@ struct thread *uproc_create(const char *name, void *entry)
 	thread->frame.fs = 0x23;
 	thread->frame.gs = 0x23;
 	thread->frame.ss = 0x23;
-	thread->frame.ef = getef();
+	thread->frame.ef = getef() | (1 << 9); /* IF */
 	return thread;
 }
 

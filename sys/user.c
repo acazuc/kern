@@ -152,8 +152,6 @@ static void *memcpy(void *d, const void *s, size_t n)
 	return d;
 }
 
-#define OUT(s) write(-2, s, sizeof(s))
-
 static int g_fd;
 
 static void exec_line(const char *line)
@@ -215,20 +213,16 @@ static void exec_line(const char *line)
 		} while (res);
 		return;
 	}
-	write(-2, "unknown command: ", 17);
-	write(-2, line, strlen(line));
-	write(-2, "\n", 1);
+	write(g_fd, "unknown command: ", 17);
+	write(g_fd, line, strlen(line));
+	write(g_fd, "\n", 1);
 }
 
 void userland()
 {
-	OUT("userland\n");
 	g_fd = open("/dev/tty0", O_RDONLY);
 	if (g_fd < 0)
-	{
-		OUT("failed to open /dev/tty0\n");
 		goto loop;
-	}
 	char buf[78] = "";
 	char line[78];
 	size_t buf_pos = 0;
@@ -242,7 +236,7 @@ void userland()
 			if (rd < 0)
 			{
 				if (errno != EAGAIN)
-					OUT("rd < 0");
+					write(g_fd, "rd < 0\n", 7);
 				continue;
 			}
 			buf_pos += rd;

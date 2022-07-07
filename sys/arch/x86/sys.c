@@ -50,12 +50,6 @@ static int sys_write(int fd, const void *data, size_t count)
 {
 	if (!verify_userdata(data, count))
 		return -EFAULT;
-	if (fd == -2)
-	{
-		for (size_t i = 0; i < count; ++i)
-			printf("%c", ((char*)data)[i]);
-		return count;
-	}
 	if (fd < 0 || (size_t)fd >= curproc->files_nb)
 		return -EBADF;
 	struct file *file = curproc->files[fd].file;

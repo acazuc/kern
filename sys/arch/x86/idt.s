@@ -17,6 +17,8 @@ isr_common:
 	push ecx
 	push ebx
 	push eax
+
+	;set kernel segments
 	mov ax, 0x10
 	mov ds, ax
 	mov es, ax

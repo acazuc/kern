@@ -227,6 +227,7 @@ static void *realloc_large(struct page *lst, void *ptr, size_t size, uint32_t fl
 	void *addr;
 	size_t len;
 
+	(void)flags;
 	addr = create_new_block(BLOCK_LARGE, size);
 	if (!addr)
 	{
@@ -240,35 +241,27 @@ static void *realloc_large(struct page *lst, void *ptr, size_t size, uint32_t fl
 	remove_page(lst);
 	vfree(lst, lst->size);
 	MALLOC_UNLOCK();
-	if (flags & M_ZERO)
-		memset(addr, 0, size);
 	return addr;
 }
 
 static void *realloc_blocky(struct page *lst, void *ptr, size_t size, uint32_t flags)
 {
 	void *addr;
-	size_t len;
 
 	if (size <= g_block_sizes[lst->type])
 	{
 		MALLOC_UNLOCK();
 		return ptr;
 	}
-	addr = create_new_block(get_block_type(size), size);
+	addr = malloc(size, flags);
 	if (!addr)
 	{
 		MALLOC_UNLOCK();
 		return NULL;
 	}
-	len = lst->size - sizeof(*lst);
-	if (size < len)
-		len = size;
-	memcpy(addr, ptr, len);
-	free(ptr);
+	memcpy(addr, ptr, g_block_sizes[lst->type]);
 	MALLOC_UNLOCK();
-	if (flags & M_ZERO)
-		memset(addr, 0, size);
+	free(ptr);
 	return addr;
 }
 
