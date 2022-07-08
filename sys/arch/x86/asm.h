@@ -92,4 +92,9 @@ static inline uint32_t getdr6(void)
 	return ret;
 }
 
+static inline void setcr3(uint32_t addr)
+{
+	__asm__ volatile ("mov %0, %%cr3" : : "a"(addr));
+}
+
 #endif

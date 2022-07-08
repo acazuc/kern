@@ -21,7 +21,8 @@ struct fs_type
 struct fs_sb
 {
 	const struct fs_sb_op *op;
-	struct fs_type *type;
+	const struct fs_type *type;
+	struct fs_node *root;
 	dev_t dev;
 };
 
@@ -29,6 +30,7 @@ struct fs_node
 {
 	const struct fs_node_op *op;
 	const struct file_op *fop;
+	struct fs_sb *mount; /* if dir is a mount point */
 	struct fs_node *parent;
 	struct fs_sb *sb;
 	struct timespec atime;
@@ -70,5 +72,9 @@ struct fs_node_op
 
 int vfs_getnode(struct fs_node *dir, const char *path, struct fs_node **node);
 void fs_node_decref(struct fs_node *node);
+
+void vfs_init(void);
+
+extern struct fs_node *g_vfs_root;
 
 #endif

@@ -1,6 +1,7 @@
 #ifndef SYS_FILE_H
 #define SYS_FILE_H
 
+#include <sys/types.h>
 #include <stddef.h>
 
 struct file_op;

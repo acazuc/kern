@@ -9,6 +9,7 @@
 #include "dev/rtc/rtc.h"
 #include "dev/acpi/acpi.h"
 #include "dev/apic/apic.h"
+#include "fs/vfs.h"
 #include "x86.h"
 #include "asm.h"
 
@@ -317,6 +318,7 @@ void boot(struct multiboot_info *mb_info)
 	gdt_init();
 	idt_init();
 	pic_init(0x20, 0x28);
+	vfs_init();
 	tty_init();
 	*(uint32_t*)(0xFFFFF000) = 0; /* remove identity paging at 0x00000000 */
 	pci_init();
@@ -336,10 +338,25 @@ void boot(struct multiboot_info *mb_info)
 	struct thread *idle_thread = kproc_create("idle", idle_loop);
 	idle_thread->pri = 255;
 	sched_add(idle_thread);
+	idle_thread->state = THREAD_RUNNING;
 	curthread = idle_thread;
 	curproc = curthread->proc;
-	struct thread *thread = uproc_create("init", userland);
-	sched_add(thread);
+	struct thread *t1, *t2;
+	{
+		struct thread *thread = uproc_create("init", userland);
+		vmm_dup(thread->proc->vmm_ctx, NULL, 0x400000, 0x4000); /* XXX remove */
+		sched_add(thread);
+		t1 = thread;
+	}
+	{
+		struct thread *thread = uproc_create("init", userland);
+		vmm_dup(thread->proc->vmm_ctx, NULL, 0x400000, 0x4000); /* XXX remove */
+		sched_add(thread);
+		t2 = thread;
+	}
+	/* added after init to avoid buggy scheduling on page fault interrupt */
+	sched_run(t1);
+	sched_run(t2);
 	idle_loop();
 	panic("post idle loop\n");
 
@@ -415,4 +432,41 @@ void isa_eoi(enum isa_irq_id id)
 		lapic_eoi(id);
 	else
 		pic_eoi(id);
+}
+
+static void init_trapframe(struct thread *thread)
+{
+	thread->trapframe.eax = 0;
+	thread->trapframe.ebx = 0;
+	thread->trapframe.ecx = 0;
+	thread->trapframe.edx = 0;
+	thread->trapframe.esi = 0;
+	thread->trapframe.edi = 0;
+	thread->trapframe.esp = (uint32_t)&thread->stack[thread->stack_size];
+	thread->trapframe.ebp = (uint32_t)&thread->stack[thread->stack_size];
+	thread->trapframe.eip = (uint32_t)thread->proc->entrypoint;
+}
+
+void init_trapframe_kern(struct thread *thread)
+{
+	init_trapframe(thread);
+	thread->trapframe.cs = 0x08;
+	thread->trapframe.ds = 0x10;
+	thread->trapframe.es = 0x10;
+	thread->trapframe.fs = 0x10;
+	thread->trapframe.gs = 0x10;
+	thread->trapframe.ss = 0x10;
+	thread->trapframe.ef = getef() | (1 << 9); /* IF */
+}
+
+void init_trapframe_user(struct thread *thread)
+{
+	init_trapframe(thread);
+	thread->trapframe.cs = 0x1B;
+	thread->trapframe.ds = 0x23;
+	thread->trapframe.es = 0x23;
+	thread->trapframe.fs = 0x23;
+	thread->trapframe.gs = 0x23;
+	thread->trapframe.ss = 0x23;
+	thread->trapframe.ef = getef() | (1 << 9); /* IF */
 }

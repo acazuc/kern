@@ -17,8 +17,6 @@ typedef uint32_t mode_t;
 #define O_CREAT  (1 << 4)
 #define O_TRUNC  (1 << 5)
 
-uint8_t g_userland_stack[4096 * 4]; /* XXX: move to vmalloc_user allocation */
-
 int32_t errno;
 
 int32_t syscall(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, uint32_t arg6);
@@ -106,25 +104,19 @@ static int getdents(int fd, struct sys_dirent *dirp, unsigned count)
 	return ret;
 }
 
+static int getpid(void)
+{
+	int32_t ret = syscall(SYS_GETPID, 0, 0, 0, 0, 0, 0);
+	TRANSFORM_ERRNO(ret);
+	return ret;
+}
+
 static size_t strlen(const char *s)
 {
 	size_t i = 0;
 	while (s[i])
 		i++;
 	return i;
-}
-
-static char *strchr(const char *s, int c)
-{
-	while (*s)
-	{
-		if (*s == (char)c)
-			return (char*)s;
-		s++;
-	}
-	if (!(char)c)
-		return (char*)s;
-	return NULL;
 }
 
 static int strcmp(const char *s1, const char *s2)
@@ -152,6 +144,20 @@ static void *memcpy(void *d, const void *s, size_t n)
 	return d;
 }
 
+static int strncmp(const char *s1, const char *s2, size_t n)
+{
+	size_t i;
+	for (i = 0; i < n && s1[i] && s2[i]; ++i)
+	{
+		uint8_t d = ((uint8_t*)s1)[i] - ((uint8_t*)s2)[i];
+		if (d)
+			return d;
+	}
+	if (i == n)
+		return 0;
+	return ((uint8_t*)s1)[i] - ((uint8_t*)s2)[i];
+}
+
 static int g_fd;
 
 static void exec_line(const char *line)
@@ -173,10 +179,13 @@ static void exec_line(const char *line)
 		}
 		return;
 	}
-	if (!strcmp(line, "stat"))
+	if (!strncmp(line, "stat", 4))
 	{
+		line += 4;
+		if (*line == ' ')
+			line++;
 		struct stat st;
-		int res = stat("/dev/tty0", &st);
+		int res = stat(line, &st);
 		if (res)
 		{
 			write(g_fd, "can't stat\n", 11);
@@ -189,11 +198,20 @@ static void exec_line(const char *line)
 		write(g_fd, str, 10);
 		return;
 	}
-	if (!strcmp(line, "ls"))
+	if (!strncmp(line, "ls", 2))
 	{
 		char buffer[128];
-		int fd = open("/dev", O_RDONLY);
+		line += 2;
+		if (*line == ' ')
+			line++;
+		int fd = open(line, O_RDONLY);
+		if (fd < 0)
+		{
+			write(g_fd, "can't open file\n", 16);
+			return;
+		}
 		int res;
+		write(g_fd, "files: ", 7);
 		do
 		{
 			res = getdents(fd, (struct sys_dirent*)buffer, sizeof(buffer));
@@ -205,12 +223,37 @@ static void exec_line(const char *line)
 			for (int i = 0; i < res;)
 			{
 				struct sys_dirent *dirent = (struct sys_dirent*)&buffer[i];
-				write(g_fd, "file: ", 6);
 				write(g_fd, dirent->name, strlen(dirent->name));
-				write(g_fd, "\n", 1);
+				write(g_fd, " ", 1);
 				i += dirent->reclen;
 			}
 		} while (res);
+		write(g_fd, "\n", 1);
+		close(fd);
+		return;
+	}
+	if (!strcmp(line, "fork"))
+	{
+		int pid = fork();
+		if (pid < 0)
+		{
+			write(g_fd, "fork failed\n", 12);
+			return;
+		}
+		if (pid)
+		{
+			write(g_fd, "parent\n", 7);
+			return;
+		}
+		write(g_fd, "child\n", 6);
+		exit(0);
+		while (1) {}
+	}
+	if (!strcmp(line, "pid"))
+	{
+		int pid = getpid();
+		char c[2] = {pid + '0', '\n'};
+		write(g_fd, c, 2);
 		return;
 	}
 	write(g_fd, "unknown command: ", 17);
@@ -223,6 +266,7 @@ void userland()
 	g_fd = open("/dev/tty0", O_RDONLY);
 	if (g_fd < 0)
 		goto loop;
+	write(g_fd, "userland\n", 9);
 	char buf[78] = "";
 	char line[78];
 	size_t buf_pos = 0;

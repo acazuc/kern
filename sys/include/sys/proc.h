@@ -1,7 +1,7 @@
 #ifndef SYS_PROC_H
 #define SYS_PROC_H
 
-#include "arch/x86/x86.h"
+#include "arch/arch.h"
 #include <sys/queue.h>
 #include <sys/types.h>
 
@@ -31,7 +31,6 @@ struct proc
 	gid_t sgid;
 	pri_t pri;
 	TAILQ_HEAD(, thread) threads;
-	TAILQ_ENTRY(proc) sched_chain;
 };
 
 enum thread_state
@@ -45,15 +44,19 @@ struct thread
 {
 	struct proc *proc;
 	enum thread_state state;
-	struct arch_framectx frame;
+	struct trapframe trapframe;
+	size_t stack_size;
+	uint8_t *stack;
 	pid_t tid;
 	pri_t pri;
 	TAILQ_ENTRY(thread) sched_chain;
 	TAILQ_ENTRY(thread) thread_chain;
+	TAILQ_ENTRY(thread) queue_chain;
 };
 
 struct thread *uproc_create(const char *name, void *entry);
 struct thread *kproc_create(const char *name, void *entry);
+struct proc *proc_fork(struct proc *proc);
 
 extern struct proc *curproc;
 extern struct thread *curthread;

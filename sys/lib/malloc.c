@@ -91,12 +91,17 @@ static struct page *alloc_page(enum block_type type, size_t size)
 	struct page *page;
 	size_t alloc_size;
 	size_t blocks_size;
+	size_t meta_size;
 
 	if (type != BLOCK_LARGE)
 		blocks_size = sizeof(uint32_t) * BLOCKS_SIZE;
 	else
 		blocks_size = 0;
-	alloc_size = size + sizeof(*page) + blocks_size + PAGE_SIZE - 1;
+	meta_size = sizeof(*page) + blocks_size;
+	if (meta_size < size) /* align data blocks on data size */
+		meta_size = size;
+	alloc_size = size + meta_size;
+	alloc_size += PAGE_SIZE - 1;
 	alloc_size -= alloc_size % PAGE_SIZE;
 	/* XXX: create alloc_size var in page, set size = alloc_size - sizeof(*page) */
 	page = vmalloc(alloc_size);
@@ -104,7 +109,7 @@ static struct page *alloc_page(enum block_type type, size_t size)
 		return NULL;
 	page->type = type;
 	page->size = alloc_size;
-	page->addr = (uint8_t*)page + sizeof(*page) + blocks_size;
+	page->addr = (uint8_t*)page + meta_size;
 	page->next = NULL;
 	memset(page->blocks, 0, blocks_size);
 	return page;
@@ -271,16 +276,20 @@ void *malloc(size_t size, uint32_t flags)
 	void *addr;
 
 	(void)flags;
-	MALLOC_LOCK();
 	if (!size)
 		return NULL;
 	type = get_block_type(size);
+	MALLOC_LOCK();
 	if (type == BLOCK_LARGE || !(addr = get_existing_block(type)))
 	{
 		addr = create_new_block(type, size);
 		if (!addr)
+		{
+			MALLOC_UNLOCK();
 			return NULL;
+		}
 	}
+	MALLOC_UNLOCK();
 	if (flags & M_ZERO)
 		memset(addr, 0, size);
 	return addr;
@@ -320,6 +329,7 @@ void free(void *ptr)
 			panic("double free %p\n", ptr);
 		*block &= ~mask;
 		check_free_pages(lst->type);
+		MALLOC_UNLOCK();
 		return;
 	}
 	panic("free unknown addr: %p\n", ptr);

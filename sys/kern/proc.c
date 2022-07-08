@@ -1,15 +1,16 @@
 #include <sys/proc.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/sched.h>
+#include <stdio.h>
 
 #include "arch/x86/asm.h"
 #include "fs/vfs.h"
 
-extern struct fs_node g_ramfs_root;
-extern uint8_t g_userland_stack[];
-
 struct thread *curthread;
 struct proc *curproc;
+
+static pid_t g_pid;
 
 static struct thread *proc_create(const char *name, void *entry)
 {
@@ -20,18 +21,17 @@ static struct thread *proc_create(const char *name, void *entry)
 	thread->proc = proc;
 	proc->name = strdup(name);
 	assert(proc->name, "can' dup proc name");
-	proc->root = &g_ramfs_root;
+	proc->root = g_vfs_root;
 	proc->cwd = proc->root;
 	proc->files = NULL;
 	proc->files_nb = 0;
 	proc->vmm_ctx = create_vmm_ctx();
-	if (!proc->vmm_ctx)
-		panic("vmm ctx allocation failed\n");
+	assert(proc->vmm_ctx, "vmm ctx allocation failed\n");
 	TAILQ_INIT(&proc->threads);
 	TAILQ_INSERT_HEAD(&proc->threads, thread, thread_chain);
 	proc->entrypoint = entry;
+	proc->pid = ++g_pid;
 	proc->ppid = 1;
-	proc->pid = 1;
 	proc->pgid = 1;
 	proc->pgrp = 1;
 	proc->uid = 0;
@@ -41,16 +41,9 @@ static struct thread *proc_create(const char *name, void *entry)
 	proc->egid = 0;
 	proc->sgid = 0;
 	thread->state = THREAD_PAUSED;
-	/* XXX: frame is arch-dependant */
-	thread->frame.eax = 0;
-	thread->frame.ebx = 0;
-	thread->frame.ecx = 0;
-	thread->frame.edx = 0;
-	thread->frame.esi = 0;
-	thread->frame.edi = 0;
-	thread->frame.esp = (uint32_t)&g_userland_stack[4096 * 4];
-	thread->frame.ebp = (uint32_t)&g_userland_stack[4096 * 4];
-	thread->frame.eip = (uint32_t)entry;
+	thread->stack_size = 1024 * 16;
+	thread->stack = vmalloc_user(proc->vmm_ctx, thread->stack_size);
+	assert(thread->stack, "can't allocate thread stack\n");
 	return thread;
 }
 
@@ -59,14 +52,7 @@ struct thread *uproc_create(const char *name, void *entry)
 	struct thread *thread = proc_create(name, entry);
 	if (!thread)
 		return NULL;
-	/* XXX: frame is arch-dependant */
-	thread->frame.cs = 0x1B;
-	thread->frame.ds = 0x23;
-	thread->frame.es = 0x23;
-	thread->frame.fs = 0x23;
-	thread->frame.gs = 0x23;
-	thread->frame.ss = 0x23;
-	thread->frame.ef = getef() | (1 << 9); /* IF */
+	init_trapframe_user(thread);
 	return thread;
 }
 
@@ -75,13 +61,58 @@ struct thread *kproc_create(const char *name, void *entry)
 	struct thread *thread = proc_create(name, entry);
 	if (!thread)
 		return NULL;
-	/* XXX: frame is arch-dependant */
-	thread->frame.cs = 0x08;
-	thread->frame.ds = 0x10;
-	thread->frame.es = 0x10;
-	thread->frame.fs = 0x10;
-	thread->frame.gs = 0x10;
-	thread->frame.ss = 0x10;
-	thread->frame.ef = getef();
+	init_trapframe_kern(thread);
 	return thread;
+}
+
+struct proc *proc_fork(struct proc *proc)
+{
+	struct proc *newp = malloc(sizeof(*newp), M_ZERO);
+	assert(newp, "can't allocate new proc\n");
+	newp->name = strdup(proc->name);
+	assert(newp->name, "can't allocate new proc name\n");
+	newp->vmm_ctx = vmm_ctx_dup(proc->vmm_ctx);
+	newp->entrypoint = proc->entrypoint;
+	newp->files = proc->files; /* XXX: incref all the files */
+	newp->files_nb = proc->files_nb;
+	newp->root = proc->root; /* XXX incref */
+	newp->cwd = proc->cwd; /* incref */
+	newp->umask = proc->umask;
+	newp->pid = ++g_pid;
+	newp->ppid = proc->pid;
+	newp->pgid = proc->pgid;
+	newp->pgrp = proc->pgrp;
+	newp->uid = proc->uid;
+	newp->euid = proc->euid;
+	newp->suid = proc->suid;
+	newp->gid = proc->gid;
+	newp->egid = proc->egid;
+	newp->sgid = proc->sgid;
+	newp->pri = proc->pri;
+	TAILQ_INIT(&newp->threads);
+	struct thread *thread;
+	TAILQ_FOREACH(thread, &proc->threads, thread_chain)
+	{
+		struct thread *newt = malloc(sizeof(*newt), M_ZERO);
+		assert(newt, "can't allocate new thread\n");
+		newt->proc = newp;
+		newt->state = thread->state;
+		if (newt->state == THREAD_RUNNING)
+			newt->state = THREAD_PAUSED;
+		newt->trapframe = thread->trapframe;
+		newt->stack_size = thread->stack_size; /* XXX handle */
+		newt->stack = thread->stack; /* XXX already copied by vmm_ctx_dup, what to do ? */
+		newt->tid = thread->tid; /* XXX */
+		newt->pri = thread->pri; /* XXX */
+		if (thread == curthread) /* XXX: hask, set ret of fork to 0 for child */
+			newt->trapframe.eax = 0;
+		TAILQ_INSERT_TAIL(&newp->threads, newt, thread_chain);
+	}
+	TAILQ_FOREACH(thread, &newp->threads, thread_chain)
+	{
+		sched_add(thread);
+		if (thread->state == THREAD_PAUSED)
+			sched_run(thread);
+	}
+	return newp;
 }

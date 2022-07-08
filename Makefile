@@ -1,38 +1,6 @@
-ASM = nasm
+MKDIR=$(PWD)/mk
 
-AS = as
-
-CC = gcc
-
-LD = gcc
-
-ASFLAGS = --32
-
-ASMFLAGS = -f elf32
-
-CFLAGS = -std=c99 \
-         -m32 \
-         -ffreestanding \
-         -O2 \
-         -Wall \
-         -Wextra \
-         -fno-omit-frame-pointer \
-         -mtune=generic \
-         -march=i686 \
-         -fno-builtin \
-         -fno-stack-protector \
-         -fcf-protection=none \
-         -g \
-         -fno-pie \
-         -fno-pic \
-         -nostdinc \
-         -isystem $(INCLUDE_DIR) \
-         -iquote $(SRC_PATH)
-
-LDFLAGS = -ffreestanding \
-          -nostdlib \
-          -nodefaultlibs \
-          -m32
+include $(MKDIR)/env.mk
 
 BIN_NAME = os.bin
 
@@ -84,6 +52,7 @@ SRC_NAME = kernel.c \
            fs/ramfs/ramfs.c \
            kern/sched.c \
            kern/proc.c \
+           kern/elf.c \
 
 SRC_PATH = sys
 
@@ -98,6 +67,14 @@ OBJ_PATH = obj
 OBJ = $(addprefix $(OBJ_PATH)/, $(OBJ_NAME))
 
 all: $(BIN_NAME)
+
+$(BIN):
+	@make MKDIR=$(MKDIR) -C $(BIN)
+
+$(LIB):
+	@make MKDIR=$(MKDIR) -C $(LIB)
+
+$(LDFILE):
 
 $(OBJ_PATH)/%.c.o: $(SRC_PATH)/%.c
 	@mkdir -p $(dir $@)
@@ -114,18 +91,12 @@ $(OBJ_PATH)/%.S.o: $(SRC_PATH)/%.S
 	@echo "AS $<"
 	@$(AS) $(ASFLAGS) $< -o $@
 
-$(BIN):
-	@make MKDIR=$(PWD)/mk -C $(BIN)
-
-$(LIB):
-	@make -I mk -C $(LIB)
-
-$(LDFILE):
-
-$(BIN_NAME): $(OBJ) $(LDFILE)
+$(BIN_NAME): $(OBJ) $(LDFILE) bin lib
 	@mkdir -p $(dir $@)
+	@ld -melf_i386 -r -b binary -o obj/sh bin/sh/sh
+	@ld -melf_i386 -r -b binary -o obj/cat bin/cat/cat
 	@echo "LD $@"
-	@$(LD) $(LDFLAGS) -T $(LDFILE) -o $@ $(OBJ) -lgcc
+	@$(LD) $(LDFLAGS) -T $(LDFILE) -o $@ $(OBJ) obj/sh obj/cat -lgcc
 
 $(ISO_NAME): $(BIN_NAME)
 	@mkdir -p $(dir $<)
@@ -159,5 +130,7 @@ clean:
 	@rm -f $(OBJ)
 	@rm -f $(BIN_NAME)
 	@rm -f $(ISO_NAME)
+	@make MKDIR=$(MKDIR) -C bin clean
+	@make MKDIR=$(MKDIR) -C lib clean
 
 .PHONY: all clean run bin lib

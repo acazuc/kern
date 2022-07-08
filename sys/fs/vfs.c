@@ -1,3 +1,5 @@
+#include "devfs/devfs.h"
+#include "ramfs/ramfs.h"
 #include "vfs.h"
 
 #include <sys/proc.h>
@@ -5,7 +7,7 @@
 #include <string.h>
 #include <errno.h>
 
-extern struct fs_node g_ramfs_root;
+struct fs_node *g_vfs_root;
 
 struct vfs_getnode_ctx
 {
@@ -19,30 +21,33 @@ int vfs_getnode(struct fs_node *dir, const char *path, struct fs_node **node)
 {
 	if (!path)
 		return EINVAL;
+	if (!dir)
+	{
+		if (*path == '/')
+			return vfs_getnode(curproc->root, path + 1, node);
+		return vfs_getnode(curproc->cwd, path, node);
+	}
 	if (!*path)
 	{
 		if (!dir)
 			return EINVAL;
-		*node = dir;
+		if (dir->mount)
+			*node = dir->mount->root;
+		else
+			*node = dir;
 		return 0;
-	}
-	if (!dir)
-	{
-		if (*path != '/')
-			return vfs_getnode(curproc->cwd, path, node);
-		return vfs_getnode(curproc->root, path + 1, node);
 	}
 	if (*path == '/')
 		return vfs_getnode(curproc->root, path + 1, node);
+	if (dir->mount)
+		dir = dir->mount->root;
 	if (!S_ISDIR(dir->mode))
 		return ENOTDIR;
 	if (path[0] == '.' && path[1] == '.' && (path[2] == '/' || path[2] == '\0'))
 		return vfs_getnode(dir->parent, path + 3, node);
-	const char *next;
 	if (path[0] == '.' && (path[1] == '/' || path[1] == '\0'))
-		next = path + 1;
-	else
-		next = strchrnul(path, '/');
+		return vfs_getnode(dir, path + 2, node);
+	const char *next = strchrnul(path, '/');
 	size_t pathlen = next - path;
 	while (*next == '/')
 		next++;
@@ -59,4 +64,13 @@ void fs_node_decref(struct fs_node *node)
 {
 	node->refcount--;
 	/* XXX: do something */
+}
+
+void vfs_init(void)
+{
+	struct fs_sb *ramfs = ramfs_init();
+	struct fs_node *devnode;
+	assert(!vfs_getnode(ramfs->root, "dev", &devnode), "can't find /dev");
+	struct fs_sb *devfs = devfs_init(devnode);
+	g_vfs_root = ramfs->root;
 }

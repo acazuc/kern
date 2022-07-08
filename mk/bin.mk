@@ -1,30 +1,4 @@
-CC = gcc
-
-ASM = nasm -f elf32
-
-AS = as --32
-
-LD = gcc
-
-CFLAGS = -std=c99 \
-         -m32 \
-         -ffreestanding \
-         -O2 \
-         -Wall \
-         -Wextra \
-         -fno-builtin \
-         -fno-stack-protector \
-         -g \
-         -fno-pie \
-         -fno-pic \
-         -nostdinc \
-         -isystem $(INCLUDE_DIR) \
-         -iquote $(SRC_PATH)
-
-LDFLAGS = -ffreestanding \
-          -nostdlib \
-          -nodefaultlibs \
-          -m32
+include $(MKDIR)/env.mk
 
 SRC_PATH = src
 
@@ -43,17 +17,17 @@ all: $(BIN)
 $(OBJ_PATH)/%.c.o: $(SRC_PATH)/%.c
 	@mkdir -p $(dir $@)
 	@echo "CC $<"
-	@$(CC) -c $< -o $@ $(CFLAGS)
+	@$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJ_PATH)/%.s.o: $(SRC_PATH)/%.s
 	@mkdir -p $(dir $@)
 	@echo "ASM $<"
-	@$(ASM) $< -o $@
+	@$(ASM) $(ASMFLAGS) $< -o $@
 
 $(OBJ_PATH)/%.S.o: $(SRC_PATH)/%.S
 	@mkdir -p $(dir $@)
 	@echo "AS $<"
-	@$(AS) $< -o $@
+	@$(AS) $(ASFLAGS) $< -o $@
 
 $(BIN): $(OBJ)
 	@mkdir -p $(dir $@)

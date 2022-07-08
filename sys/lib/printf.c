@@ -163,7 +163,7 @@ static int printf_buf(struct printf_buf *buf, const char *fmt, va_list va_arg)
 
 int vprintf(const char *fmt, va_list va_arg)
 {
-	char str[4096];
+	char str[1024];
 	struct printf_buf buf;
 	buf.data = str;
 	buf.size = sizeof(str);

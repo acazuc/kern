@@ -63,7 +63,7 @@ int tty_fioctl(struct file *file, unsigned long req, intptr_t data)
 	return -ENOTTY;
 }
 
-struct file_op g_tty_fop =
+static const struct file_op g_tty_fop =
 {
 	.open = tty_fopen,
 	.close = tty_fclose,

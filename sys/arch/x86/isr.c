@@ -3,6 +3,7 @@
 
 #include <sys/sched.h>
 #include <sys/proc.h>
+#include <string.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <errno.h>
@@ -11,75 +12,75 @@ static int_handler_t g_interrupt_handlers[256];
 
 static void handle_divide_by_zero(const struct int_ctx *ctx)
 {
-	panic("divide by zero @ 0x%08lx\n", ctx->frame.eip);
+	panic("divide by zero @ 0x%08lx\n", ctx->trapframe.eip);
 }
 
 static void handle_debug(const struct int_ctx *ctx)
 {
 	uint32_t dr6 = getdr6();
-	panic("debug @ 0x%08lx (%08lx)\n", ctx->frame.eip, dr6);
+	panic("debug @ 0x%08lx (%08lx)\n", ctx->trapframe.eip, dr6);
 }
 
 static void handle_nmi(const struct int_ctx *ctx)
 {
 	uint8_t scpa = inb(0x92);
 	uint8_t scpb = inb(0x61);
-	panic("non maskable interrupt @ 0x%08lx (%02x, %02x)\n", ctx->frame.eip, scpa, scpb);
+	panic("non maskable interrupt @ 0x%08lx (%02x, %02x)\n", ctx->trapframe.eip, scpa, scpb);
 }
 
 static void handle_breakpoint(const struct int_ctx *ctx)
 {
-	panic("breakpoint @ 0x%08lx\n", ctx->frame.eip);
+	panic("breakpoint @ 0x%08lx\n", ctx->trapframe.eip);
 }
 
 static void handle_overflow(const struct int_ctx *ctx)
 {
-	panic("overflow @ 0x%08lx\n", ctx->frame.eip);
+	panic("overflow @ 0x%08lx\n", ctx->trapframe.eip);
 }
 
 static void handle_bound_range_exceeded(const struct int_ctx *ctx)
 {
-	panic("bound range exceeded @ 0x%08lx\n", ctx->frame.eip);
+	panic("bound range exceeded @ 0x%08lx\n", ctx->trapframe.eip);
 }
 
 static void handle_invalid_opcode(const struct int_ctx *ctx)
 {
-	panic("invalid opcode @ 0x%08lx\n", ctx->frame.eip);
+	panic("invalid opcode @ 0x%08lx\n", ctx->trapframe.eip);
 }
 
 static void handle_device_not_available(const struct int_ctx *ctx)
 {
-	panic("device not available @ 0x%08lx\n", ctx->frame.eip);
+	panic("device not available @ 0x%08lx\n", ctx->trapframe.eip);
 }
 
 static void handle_double_fault(const struct int_ctx *ctx)
 {
-	panic("double fault: 0x%lx @ 0x%08lx\n", ctx->err, ctx->frame.eip);
+	panic("double fault: 0x%lx @ 0x%08lx\n", ctx->err, ctx->trapframe.eip);
 }
 
 static void handle_coprocessor_segment_overrun(const struct int_ctx *ctx)
 {
-	panic("coprocessor segment overrun @ 0x%08lx\n", ctx->frame.eip);
+	panic("coprocessor segment overrun @ 0x%08lx\n", ctx->trapframe.eip);
 }
 
 static void handle_invalid_tss(const struct int_ctx *ctx)
 {
-	panic("invalid tss: 0x%lx @ 0x%08lx\n", ctx->err, ctx->frame.eip);
+	panic("invalid tss: 0x%lx @ 0x%08lx\n", ctx->err, ctx->trapframe.eip);
 }
 
 static void handle_segment_not_present(const struct int_ctx *ctx)
 {
-	panic("segment not present: 0x%lx @ 0x%08lx\n", ctx->err, ctx->frame.eip);
+	panic("segment not present: 0x%lx @ 0x%08lx\n", ctx->err, ctx->trapframe.eip);
 }
 
 static void handle_stack_segment_fault(const struct int_ctx *ctx)
 {
-	panic("stack segment fault: 0x%lx @ 0x%08lx\n", ctx->err, ctx->frame.eip);
+	panic("stack segment fault: 0x%lx @ 0x%08lx\n", ctx->err, ctx->trapframe.eip);
 }
 
 static void handle_general_protection_fault(const struct int_ctx *ctx)
 {
-	panic("general protection fault: 0x%lx @ 0x%08lx\n", ctx->err, ctx->frame.eip);
+	panic("general protection fault: 0x%lx @ 0x%08lx\n", ctx->err, ctx->trapframe.eip);
 }
 
 static void handle_page_fault(const struct int_ctx *ctx)
@@ -91,52 +92,52 @@ static void handle_page_fault(const struct int_ctx *ctx)
 		paging_alloc(page_addr);
 		return;
 	}
-	panic("page protection violation addr 0x%08lx: 0x%08lx @ 0x%08lx\n", page_addr, ctx->err, ctx->frame.eip);
+	panic("page protection violation addr 0x%08lx: 0x%08lx @ 0x%08lx\n", page_addr, ctx->err, ctx->trapframe.eip);
 }
 
 static void handle_x87_fpe(const struct int_ctx *ctx)
 {
-	panic("x87 fpe @ 0x%08lx\n", ctx->frame.eip);
+	panic("x87 fpe @ 0x%08lx\n", ctx->trapframe.eip);
 }
 
 static void handle_alignment_check(const struct int_ctx *ctx)
 {
-	panic("alignment check @ 0x%08lx\n", ctx->frame.eip);
+	panic("alignment check @ 0x%08lx\n", ctx->trapframe.eip);
 }
 
 static void handle_machine_check(const struct int_ctx *ctx)
 {
-	panic("machine check @ 0x%08lx\n", ctx->frame.eip);
+	panic("machine check @ 0x%08lx\n", ctx->trapframe.eip);
 }
 
 static void handle_simd_fpe(const struct int_ctx *ctx)
 {
-	panic("simd fpe @ 0x%08lx\n", ctx->frame.eip);
+	panic("simd fpe @ 0x%08lx\n", ctx->trapframe.eip);
 }
 
 static void handle_virtualization_exception(const struct int_ctx *ctx)
 {
-	panic("virtualization exception @ 0x%08lx\n", ctx->frame.eip);
+	panic("virtualization exception @ 0x%08lx\n", ctx->trapframe.eip);
 }
 
 static void handle_control_protection_exception(const struct int_ctx *ctx)
 {
-	panic("control protection exception @ 0x%08lx\n", ctx->frame.eip);
+	panic("control protection exception @ 0x%08lx\n", ctx->trapframe.eip);
 }
 
 static void handle_hypervisor_injection_exception(const struct int_ctx *ctx)
 {
-	panic("hypervisor injection exception @ 0x%08lx\n", ctx->frame.eip);
+	panic("hypervisor injection exception @ 0x%08lx\n", ctx->trapframe.eip);
 }
 
 static void handle_vmm_communication_exception(const struct int_ctx *ctx)
 {
-	panic("vmm communication exception @ 0x%08lx\n", ctx->frame.eip);
+	panic("vmm communication exception @ 0x%08lx\n", ctx->trapframe.eip);
 }
 
 static void handle_security_exception(const struct int_ctx *ctx)
 {
-	panic("security exception @ 0x%08lx\n", ctx->frame.eip);
+	panic("security exception @ 0x%08lx\n", ctx->trapframe.eip);
 }
 
 static void handle_syscall(const struct int_ctx *ctx)
@@ -146,14 +147,18 @@ static void handle_syscall(const struct int_ctx *ctx)
 
 void handle_interrupt(uint32_t id, struct int_ctx *ctx)
 {
-	curthread->frame = ctx->frame;
+	if (curthread)
+		memcpy(&curthread->trapframe, &ctx->trapframe, sizeof(ctx->trapframe));
 	if (id >= 256)
-		panic("invalid interrupt id: 0x%08lx @ 0x%08lx (err: 0x%08lx)\n", id, ctx->frame.eip, ctx->err);
+		panic("invalid interrupt id: 0x%08lx @ 0x%08lx (err: 0x%08lx)\n", id, ctx->trapframe.eip, ctx->err);
 	if (!g_interrupt_handlers[id])
-		panic("unhandled interrupt 0x%02lx @ 0x%08lx (err: 0x%08lx)\n", id, ctx->frame.eip, ctx->err);
+		panic("unhandled interrupt 0x%02lx @ 0x%08lx (err: 0x%08lx)\n", id, ctx->trapframe.eip, ctx->err);
 	g_interrupt_handlers[id](ctx);
-	sched_tick();
-	ctx->frame = curthread->frame;
+	if (curthread)
+	{
+		sched_tick();
+		memcpy(&ctx->trapframe, &curthread->trapframe, sizeof(ctx->trapframe));
+	}
 }
 
 static int_handler_t g_interrupt_handlers[256] =

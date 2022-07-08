@@ -29,7 +29,7 @@ enum isa_irq_id
 	ISA_IRQ_ATA2,
 };
 
-struct arch_framectx /* XXX more generic name */
+struct trapframe
 {
 	uint32_t eax;
 	uint32_t ebx;
@@ -51,7 +51,7 @@ struct arch_framectx /* XXX more generic name */
 
 struct int_ctx
 {
-	struct arch_framectx frame;
+	struct trapframe trapframe;
 	uint32_t err;
 };
 

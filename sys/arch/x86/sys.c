@@ -1,5 +1,7 @@
 #include "fs/vfs.h"
 #include "dev/pit/pit.h"
+
+#include <sys/proc.h>
 #include <sys/file.h>
 #include <sys/proc.h>
 #include <sys/stat.h>
@@ -31,7 +33,10 @@ static int sys_exit(int code)
 
 static int sys_fork()
 {
-	return -ENOSYS;
+	struct proc *proc = proc_fork(curproc);
+	if (!proc)
+		return -EAGAIN;
+	return proc->pid;
 }
 
 static int sys_read(int fd, void *data, size_t count)
@@ -454,7 +459,7 @@ static int (*g_syscalls[])() =
 
 void call_sys(const struct int_ctx *ctx)
 {
-	uint32_t id = ctx->frame.eax;
+	uint32_t id = ctx->trapframe.eax;
 	uint32_t ret;
 	if (id >= sizeof(g_syscalls) / sizeof(*g_syscalls))
 	{
@@ -466,7 +471,7 @@ void call_sys(const struct int_ctx *ctx)
 		ret = -ENOSYS;
 		goto end;
 	}
-	ret = g_syscalls[id](ctx->frame.ebx, ctx->frame.ecx, ctx->frame.edx, ctx->frame.esi, ctx->frame.edi, ctx->frame.ebp);
+	ret = g_syscalls[id](ctx->trapframe.ebx, ctx->trapframe.ecx, ctx->trapframe.edx, ctx->trapframe.esi, ctx->trapframe.edi, ctx->trapframe.ebp);
 end:
-	curthread->frame.eax = ret;
+	curthread->trapframe.eax = ret;
 }
