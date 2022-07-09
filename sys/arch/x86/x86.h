@@ -69,6 +69,7 @@ void set_isa_irq_handler(enum isa_irq_id irq, int_handler_t handler);
 void enable_isa_irq(enum isa_irq_id id);
 void disable_isa_irq(enum isa_irq_id id);
 void isa_eoi(enum isa_irq_id id);
+void tss_set_ptr(void *ptr);
 
 extern int g_isa_irq[16];
 

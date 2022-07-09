@@ -1,5 +1,5 @@
-#ifndef SYS_SYS_H
-#define SYS_SYS_H
+#ifndef SYS_SYSCALL_H
+#define SYS_SYSCALL_H
 
 #define SYS_EXIT      1
 #define SYS_FORK      2

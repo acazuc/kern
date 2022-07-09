@@ -1,6 +1,6 @@
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/sys.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <stdarg.h>
@@ -246,8 +246,8 @@ static void exec_line(const char *line)
 			return;
 		}
 		write(g_fd, "child\n", 6);
-		exit(0);
-		while (1) {}
+		while (1)
+			exit(0);
 	}
 	if (!strcmp(line, "pid"))
 	{

@@ -1,11 +1,11 @@
 #include "fs/vfs.h"
 #include "dev/pit/pit.h"
 
+#include <sys/syscall.h>
 #include <sys/proc.h>
 #include <sys/file.h>
 #include <sys/proc.h>
 #include <sys/stat.h>
-#include <sys/sys.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -14,6 +14,7 @@
 
 static int verify_userdata(const void *ptr, size_t count)
 {
+	/* XXX */
 	(void)ptr;
 	(void)count;
 	return 1;
@@ -21,22 +22,24 @@ static int verify_userdata(const void *ptr, size_t count)
 
 static int verify_userstr(const char *str)
 {
+	/* XXX */
 	(void)str;
 	return 1;
 }
 
 static int sys_exit(int code)
 {
+	/* XXX */
 	(void)code;
 	return -ENOSYS;
 }
 
 static int sys_fork()
 {
-	struct proc *proc = proc_fork(curproc);
-	if (!proc)
+	struct thread *thread = proc_fork(curthread);
+	if (!thread)
 		return -EAGAIN;
-	return proc->pid;
+	return thread->proc->pid;
 }
 
 static int sys_read(int fd, void *data, size_t count)
@@ -45,7 +48,9 @@ static int sys_read(int fd, void *data, size_t count)
 		return -EFAULT;
 	if (fd < 0 || (size_t)fd >= curproc->files_nb)
 		return -EBADF;
-	struct file *file = curproc->files[fd].file;
+	struct file *file = curproc->files[fd];
+	if (!file)
+		return -EBADF;
 	if (!file->op || !file->op->read)
 		return -EINVAL; /* XXX */
 	return file->op->read(file, data, count);
@@ -57,7 +62,9 @@ static int sys_write(int fd, const void *data, size_t count)
 		return -EFAULT;
 	if (fd < 0 || (size_t)fd >= curproc->files_nb)
 		return -EBADF;
-	struct file *file = curproc->files[fd].file;
+	struct file *file = curproc->files[fd];
+	if (!file)
+		return -EBADF;
 	if (!file->op || !file->op->write)
 		return -EINVAL; /* XXX */
 	return file->op->write(file, data, count);
@@ -79,6 +86,7 @@ static int sys_open(const char *path, int flags, mode_t mode)
 		fs_node_decref(node);
 		return -ENOMEM;
 	}
+	file->refcount = 1;
 	if (node->fop && node->fop->open)
 	{
 		ret = node->fop->open(file, node);
@@ -92,7 +100,7 @@ static int sys_open(const char *path, int flags, mode_t mode)
 	file->op = node->fop;
 	file->node = node;
 	file->off = 0;
-	struct filedesc *fd = realloc(curproc->files, sizeof(*curproc->files) * (curproc->files_nb + 1), 0);
+	struct file **fd = realloc(curproc->files, sizeof(*curproc->files) * (curproc->files_nb + 1), 0);
 	if (!fd)
 	{
 		if (file->op && file->op->close)
@@ -101,7 +109,7 @@ static int sys_open(const char *path, int flags, mode_t mode)
 		return -ENOMEM;
 	}
 	curproc->files = fd;
-	curproc->files[curproc->files_nb].file = file;
+	curproc->files[curproc->files_nb] = file;
 	curproc->files_nb++;
 	return curproc->files_nb - 1;
 }
@@ -110,12 +118,13 @@ static int sys_close(int fd)
 {
 	if (fd < 0 || (unsigned)fd >= curproc->files_nb)
 		return -EBADF;
-	struct file *file = curproc->files[fd].file;
+	struct file *file = curproc->files[fd];
 	if (!file)
 		return -EBADF;
 	if (file->op && file->op->close)
 		file->op->close(file);
 	free(file); /* XXX: decref */
+	curproc->files[fd] = NULL;
 	return -ENOSYS;
 }
 
@@ -307,7 +316,9 @@ static int sys_ioctl(int fd, unsigned long req, intptr_t data)
 {
 	if (fd < 0 || (size_t)fd >= curproc->files_nb)
 		return -EBADF;
-	struct file *file = curproc->files[fd].file;
+	struct file *file = curproc->files[fd];
+	if (!file)
+		return -EBADF;
 	if (!file->op || !file->op->ioctl)
 		return -EINVAL; /* XXX */
 	return file->op->ioctl(file, req, data);
@@ -342,12 +353,12 @@ static int sys_fstat(int fd, struct stat *statbuf)
 {
 	if (fd < 0 || (size_t)fd >= curproc->files_nb)
 		return -EBADF;
-	struct file *file = curproc->files[fd].file;
-	if (!file->op || !file->op->read)
-		return -EINVAL; /* XXX */
+	struct file *file = curproc->files[fd];
+	if (!file)
+		return -EBADF;
 	struct fs_node *node = file->node;
 	if (!node)
-		return -EINVAL;
+		return -EINVAL; /* XXX */
 	statbuf->st_dev = node->sb->dev;
 	statbuf->st_ino = node->ino;
 	statbuf->st_mode = node->mode;
@@ -398,7 +409,9 @@ static int sys_getdents(int fd, struct sys_dirent *dirp, size_t count)
 		return -EFAULT;
 	if (fd < 0 || (size_t)fd >= curproc->files_nb)
 		return -EBADF;
-	struct file *file = curproc->files[fd].file;
+	struct file *file = curproc->files[fd];
+	if (!file)
+		return -EBADF;
 	struct fs_node *node = file->node;
 	if (!node)
 		return -EINVAL; /* XXX */

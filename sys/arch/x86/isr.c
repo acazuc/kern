@@ -85,8 +85,8 @@ static void handle_general_protection_fault(const struct int_ctx *ctx)
 
 static void handle_page_fault(const struct int_ctx *ctx)
 {
-	uint32_t page_addr;
-	__asm__ volatile ("mov %%cr2, %0" : "=a"(page_addr));
+	uint32_t page_addr = getcr2();
+	printf("page protection violation addr 0x%08lx: 0x%08lx @ 0x%08lx\n", page_addr, ctx->err, ctx->trapframe.eip);
 	if (!(ctx->err & 1))
 	{
 		paging_alloc(page_addr);
@@ -147,17 +147,24 @@ static void handle_syscall(const struct int_ctx *ctx)
 
 void handle_interrupt(uint32_t id, struct int_ctx *ctx)
 {
-	if (curthread)
+	/*
+	 * disable context switching on exception
+	 *
+	 * exceptions can be thrown while being in kernel mode
+	 * and we don't want to bother with nested interrupt trapframe handling
+	 */
+	if (id >= 0x20 && curthread)
 		memcpy(&curthread->trapframe, &ctx->trapframe, sizeof(ctx->trapframe));
 	if (id >= 256)
 		panic("invalid interrupt id: 0x%08lx @ 0x%08lx (err: 0x%08lx)\n", id, ctx->trapframe.eip, ctx->err);
 	if (!g_interrupt_handlers[id])
 		panic("unhandled interrupt 0x%02lx @ 0x%08lx (err: 0x%08lx)\n", id, ctx->trapframe.eip, ctx->err);
 	g_interrupt_handlers[id](ctx);
-	if (curthread)
+	if (id >= 0x20 && curthread)
 	{
 		sched_tick();
 		memcpy(&ctx->trapframe, &curthread->trapframe, sizeof(ctx->trapframe));
+		tss_set_ptr(&curthread->int_stack[curthread->int_stack_size]);
 	}
 }
 

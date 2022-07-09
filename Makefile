@@ -101,6 +101,8 @@ $(BIN_NAME): $(OBJ) $(LDFILE) bin lib
 $(ISO_NAME): $(BIN_NAME)
 	@mkdir -p $(dir $<)
 	@mkdir -p isodir
+	@cp $(BIN_NAME) isodir/boot
+	@cp grub.cfg isodir/boot
 	@grub-mkrescue -o $@ isodir
 
 $(DISK_FILE):

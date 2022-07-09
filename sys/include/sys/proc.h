@@ -14,7 +14,7 @@ struct proc
 	struct vmm_ctx *vmm_ctx;
 	char *name;
 	void *entrypoint;
-	struct filedesc *files;
+	struct file **files;
 	uint32_t files_nb;
 	struct fs_node *root;
 	struct fs_node *cwd;
@@ -47,6 +47,8 @@ struct thread
 	struct trapframe trapframe;
 	size_t stack_size;
 	uint8_t *stack;
+	size_t int_stack_size;
+	uint8_t *int_stack;
 	pid_t tid;
 	pri_t pri;
 	TAILQ_ENTRY(thread) sched_chain;
@@ -56,7 +58,9 @@ struct thread
 
 struct thread *uproc_create(const char *name, void *entry);
 struct thread *kproc_create(const char *name, void *entry);
-struct proc *proc_fork(struct proc *proc);
+struct thread *proc_fork(struct thread *thread);
+
+struct thread *elf_createproc(struct file *file);
 
 extern struct proc *curproc;
 extern struct thread *curthread;

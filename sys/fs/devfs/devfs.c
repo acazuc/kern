@@ -113,24 +113,83 @@ static const struct file_op g_mem_fop =
 	/* XXX */
 };
 
+static int null_write(struct file *file, const void *data, size_t count)
+{
+	(void)file;
+	(void)data;
+	return count;
+}
+
+static int null_read(struct file *file, void *data, size_t count)
+{
+	(void)file;
+	(void)data;
+	(void)count;
+	return 0;
+}
+
 static const struct file_op g_null_fop =
 {
-	/* XXX */
+	.write = null_write,
+	.read = null_read,
 };
+
+static int zero_write(struct file *file, const void *data, size_t count)
+{
+	(void)file;
+	(void)data;
+	return count;
+}
+
+static int zero_read(struct file *file, void *data, size_t count)
+{
+	(void)file;
+	memset(data, 0, count);
+	return count;
+}
 
 static const struct file_op g_zero_fop =
 {
-	/* XXX */
+	.write = zero_write,
+	.read = zero_read,
 };
+
+static int random_write(struct file *file, const void *data, size_t count)
+{
+	(void)file;
+	(void)data;
+	return count;
+}
+
+static int random_read(struct file *file, void *data, size_t count)
+{
+	/* XXX */
+	return 0;
+}
 
 static const struct file_op g_random_fop =
 {
-	/* XXX */
+	.write = random_write,
+	.read = random_read,
 };
+
+static int urandom_write(struct file *file, const void *data, size_t count)
+{
+	(void)file;
+	(void)data;
+	return count;
+}
+
+static int urandom_read(struct file *file, void *data, size_t count)
+{
+	/* XXX */
+	return 0;
+}
 
 static const struct file_op g_urandom_fop =
 {
-	/* XXX */
+	.write = urandom_write,
+	.read = urandom_read,
 };
 
 static int find_ino(struct devfs_node *node)

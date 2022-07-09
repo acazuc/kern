@@ -48,8 +48,11 @@ static const struct fs_node_op g_reg_op =
 {
 };
 
+static int reg_read(struct file *file, void *data, size_t count);
+
 static const struct file_op g_reg_fop =
 {
+	.read = reg_read,
 };
 
 struct ramfs_node
@@ -73,6 +76,19 @@ struct ramfs_reg
 };
 
 static size_t g_ino;
+
+static int reg_read(struct file *file, void *data, size_t count)
+{
+	struct ramfs_reg *reg = (struct ramfs_reg*)file->node;
+	if (file->off > reg->size)
+		return 0;
+	size_t rem = reg->size - file->off;
+	if (count > rem)
+		count = rem;
+	memcpy(data, &reg->data[file->off], count);
+	file->off += count;
+	return count;
+}
 
 static int dir_lookup(struct fs_node *node, const char *name, uint32_t namelen, struct fs_node **child)
 {
@@ -170,10 +186,12 @@ struct fs_sb *ramfs_init(void)
 {
 	struct ramfs_dir *root = mkdir(NULL, "");
 	struct ramfs_dir *dev = mkdir(root, "dev");
-	struct ramfs_reg *sh = mkreg(root, "sh");
+	struct ramfs_dir *bin = mkdir(root, "bin");
+	struct ramfs_dir *lib = mkdir(root, "lib");
+	struct ramfs_reg *sh = mkreg(bin, "sh");
 	sh->data = &_binary_bin_sh_sh_start;
 	sh->size = &_binary_bin_sh_sh_end - &_binary_bin_sh_sh_start;
-	struct ramfs_reg *cat = mkreg(root, "cat");
+	struct ramfs_reg *cat = mkreg(bin, "cat");
 	cat->data = &_binary_bin_cat_cat_start;
 	cat->size = &_binary_bin_cat_cat_end - &_binary_bin_cat_cat_start;
 	g_sb.root = &root->node.node;

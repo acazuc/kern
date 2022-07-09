@@ -64,25 +64,27 @@
 #define TBL_ID(addr) ((((uint32_t)(addr)) & TBL_MASK) >> TBL_SHIFT)
 #define PGE_ID(addr) ((((uint32_t)(addr)) & PGE_MASK) >> PGE_SHIFT)
 
-#define DIR_FLAG_P   (1 << 0) /* is present */
-#define DIR_FLAG_RW  (1 << 1) /* enable write */
-#define DIR_FLAG_US  (1 << 2) /* available for userspace */
-#define DIR_FLAG_PWT (1 << 3)
-#define DIR_FLAG_PCD (1 << 4) /* must not be cached */
-#define DIR_FLAG_A   (1 << 5) /* has been accessed */
+#define DIR_FLAG_P    (1 << 0) /* is present */
+#define DIR_FLAG_RW   (1 << 1) /* enable write */
+#define DIR_FLAG_US   (1 << 2) /* available for userspace */
+#define DIR_FLAG_PWT  (1 << 3)
+#define DIR_FLAG_PCD  (1 << 4) /* must not be cached */
+#define DIR_FLAG_A    (1 << 5) /* has been accessed */
+#define DIR_FLAG_MASK 0xFFF
 
 #define DIR_TBL_ADDR(addr) ((uint32_t)addr & 0xFFFFF000)
 
-#define TBL_FLAG_P   (1 << 0) /* is present */
-#define TBL_FLAG_RW  (1 << 1) /* enable write */
-#define TBL_FLAG_US  (1 << 2) /* available for userspace */
-#define TBL_FLAG_PWT (1 << 3)
-#define TBL_FLAG_PCD (1 << 4) /* must not be cached */
-#define TBL_FLAG_A   (1 << 5) /* has been accessed */
-#define TBL_FLAG_D   (1 << 6) /* has been written to */
-#define TBL_FLAG_PAT (1 << 7)
-#define TBL_FLAG_G   (1 << 8) /* global page */
-#define TBL_FLAG_V   (1 << 9) /* custom flag: virtual memory has been allocated */
+#define TBL_FLAG_P    (1 << 0) /* is present */
+#define TBL_FLAG_RW   (1 << 1) /* enable write */
+#define TBL_FLAG_US   (1 << 2) /* available for userspace */
+#define TBL_FLAG_PWT  (1 << 3)
+#define TBL_FLAG_PCD  (1 << 4) /* must not be cached */
+#define TBL_FLAG_A    (1 << 5) /* has been accessed */
+#define TBL_FLAG_D    (1 << 6) /* has been written to */
+#define TBL_FLAG_PAT  (1 << 7)
+#define TBL_FLAG_G    (1 << 8) /* global page */
+#define TBL_FLAG_V    (1 << 9) /* custom flag: virtual memory has been allocated */
+#define TBL_FLAG_MASK 0xFFF
 
 #define TBL_VADDR(id)  ((uint32_t*)VADDR_RECU_BEG + (id) * 0x400)
 #define DIR_VADDR      ((uint32_t*)0xFFFFF000)
@@ -93,16 +95,17 @@ struct vmm_range
 {
 	uint32_t addr;
 	uint32_t size;
-	struct vmm_range *prev;
-	struct vmm_range *next;
+	TAILQ_ENTRY(vmm_range) chain;
 };
+
+TAILQ_HEAD(vmm_range_head, vmm_range);
 
 struct vmm_region
 {
 	uint32_t addr;
 	uint32_t size;
 	struct vmm_range range_0; /* always have an available item */
-	struct vmm_range *ranges; /* address-ordered */
+	struct vmm_range_head ranges; /* address-ordered */
 };
 
 struct vmm_ctx
@@ -162,12 +165,12 @@ end:
 
 static void pmm_free_page(uint32_t addr)
 {
-	assert(addr >= g_pmm_addr, "free_page of invalid address (too low)\n");
-	assert(addr < g_pmm_addr + g_pmm_size, "free_page of invalid address (too high)\n");
+	assert(addr >= g_pmm_addr, "free_page of invalid address (too low): %lx\n", addr);
+	assert(addr < g_pmm_addr + g_pmm_size, "free_page of invalid address (too high): %lx\n", addr);
 	uint32_t delta = (addr - g_pmm_addr) / PAGE_SIZE;
 	uint32_t *bitmap = &g_pmm_bitmap[delta / 32];
 	uint32_t mask = (1 << (delta % 32));
-	assert(*bitmap & mask, "free_page of unallocated page\n");
+	assert(*bitmap & mask, "free_page of unallocated page: %lx\n", addr);
 	*bitmap &= ~mask;
 	if (delta < g_pmm_bitmap_first)
 		g_pmm_bitmap_first = delta;
@@ -237,7 +240,7 @@ static void vmm_free_page(struct vmm_ctx *ctx, uint32_t addr)
 	uint32_t tbl_id = TBL_ID(addr);
 	uint32_t *tbl = &tbl_ptr[tbl_id];
 	if (*tbl & TBL_FLAG_P)
-		pmm_free_page(DIR_TBL_ADDR(tbl));
+		pmm_free_page(*tbl & ~PAGE_MASK);
 	*tbl = mkentry(0, 0);
 	vunmap(tbl_ptr, PAGE_SIZE);
 	invlpg(addr);
@@ -278,105 +281,82 @@ static void vmm_unmap_page(uint32_t addr)
 
 static uint32_t vmm_get_free_range(struct vmm_region *region, uint32_t size)
 {
-	if (!region->ranges)
+	if (TAILQ_EMPTY(&region->ranges))
 	{
-		region->ranges = &region->range_0;
-		region->range_0.prev = NULL;
-		region->range_0.next = NULL;
 		region->range_0.addr = region->addr + size;
 		region->range_0.size = region->size - size;
+		TAILQ_INSERT_HEAD(&region->ranges, &region->range_0, chain);
 		return region->addr;
 	}
-	for (struct vmm_range *item = region->ranges; item; item = item->next)
+	struct vmm_range *item;
+	TAILQ_FOREACH(item, &region->ranges, chain)
 	{
-		if (item->size >= size)
-		{
-			uint32_t addr = item->addr;
-			item->addr += size;
-			item->size -= size;
-			return addr;
-		}
+		if (item->size < size)
+			continue;
+		uint32_t addr = item->addr;
+		item->addr += size;
+		item->size -= size;
+		return addr;
 	}
 	return UINT32_MAX;
 }
 
 static void vmm_set_free_range(struct vmm_region *region, uint32_t addr, uint32_t size)
 {
-	if (!region->ranges)
+	if (TAILQ_EMPTY(&region->ranges))
 	{
-		region->ranges = &region->range_0;
-		region->range_0.prev = NULL;
-		region->range_0.next = NULL;
 		region->range_0.addr = addr;
 		region->range_0.size = size;
+		TAILQ_INSERT_HEAD(&region->ranges, &region->range_0, chain);
 		return;
 	}
-	for (struct vmm_range *item = region->ranges; ; item = item->next)
+	struct vmm_range *item;
+	TAILQ_FOREACH(item, &region->ranges, chain)
 	{
 		if (item->addr == addr + size)
 		{
 			item->addr -= size;
 			item->size += size;
-			if (item->prev)
-			{
-				if (item->prev->addr + size == addr)
-				{
-					item->prev->size += item->size;
-					item->prev->next = item->next;
-					if (item->next)
-						item->next->prev = item->prev;
-					if (item != &region->range_0)
-						free(item);
-				}
-			}
+			struct vmm_range *prev = TAILQ_PREV(item, vmm_range_head, chain);
+			if (!prev)
+				return;
+			if (prev->addr + size != addr)
+				return;
+			prev->size += item->size;
+			TAILQ_REMOVE(&region->ranges, item, chain);
+			if (item != &region->range_0)
+				free(item);
 			return;
 		}
 		if (item->addr + item->size == addr)
 		{
 			item->size += size;
-			if (item->next)
-			{
-				if (item->next->addr == item->addr + item->size)
-				{
-					item->size += item->next->size;
-					if (item->next->next)
-						item->next->next->prev = item;
-					struct vmm_range *next = item->next->next;
-					if (item->next != &region->range_0)
-						free(item->next);
-					item->next = next;
-				}
-			}
+			struct vmm_range *next = TAILQ_NEXT(item, chain);
+			if (!next)
+				return;
+			if (next->addr != item->addr + item->size)
+				return;
+			item->size += next->size;
+			TAILQ_REMOVE(&region->ranges, next, chain);
+			if (next != &region->range_0)
+				free(next);
 			return;
 		}
 		if (addr < item->addr)
 		{
 			struct vmm_range *new = malloc(sizeof(*new), 0);
 			assert(new, "can't allocate new free space\n");
-			new->next = item;
-			new->prev = item->prev;
-			item->prev = new;
-			if (new->prev)
-				new->prev->next = new;
-			else
-				region->ranges = new;
 			new->addr = addr;
 			new->size = size;
-			return;
-		}
-		if (!item->next)
-		{
-			struct vmm_range *new = malloc(sizeof(*new), 0);
-			assert(new, "can't allocate new free space\n");
-			new->next = NULL;
-			new->prev = item;
-			item->next = new;
-			new->addr = addr;
-			new->size = size;
+			TAILQ_INSERT_BEFORE(item, new, chain);
 			return;
 		}
 	}
-	panic("dead code\n");
+	struct vmm_range *new = malloc(sizeof(*new), 0);
+	assert(new, "can't allocate new free space\n");
+	new->addr = addr;
+	new->size = size;
+	TAILQ_INSERT_TAIL(&region->ranges, new, chain);
 }
 
 void vmm_setctx(const struct vmm_ctx *ctx)
@@ -402,7 +382,7 @@ struct vmm_ctx *create_vmm_ctx(void)
 	ctx->dir_paddr = get_paddr((uint32_t)ctx->dir);
 	ctx->region.addr = VADDR_USER_BEG;
 	ctx->region.size = VADDR_USER_END - VADDR_USER_BEG;
-	ctx->region.ranges = NULL;
+	TAILQ_INIT(&ctx->region.ranges);
 	return ctx;
 }
 
@@ -438,25 +418,15 @@ static void dup_region(struct vmm_region *dst, const struct vmm_region *src)
 {
 	dst->addr = src->addr;
 	dst->size = src->size;
-	if (!src->ranges)
-	{
-		dst->ranges = NULL;
-		return;
-	}
-	struct vmm_range *prev = NULL;
-	for (const struct vmm_range *rsrc = src->ranges; rsrc; rsrc = rsrc->next)
+	TAILQ_INIT(&dst->ranges);
+	struct vmm_range *item;
+	TAILQ_FOREACH(item, &src->ranges, chain)
 	{
 		struct vmm_range *newr = malloc(sizeof(*newr), 0);
 		assert(newr, "can't duplicate new range\n");
-		newr->addr = rsrc->addr;
-		newr->size = rsrc->size;
-		newr->next = NULL;
-		newr->prev = prev;
-		if (prev)
-			prev->next = newr;
-		else
-			dst->ranges = newr;
-		prev = newr;
+		newr->addr = item->addr;
+		newr->size = item->size;
+		TAILQ_INSERT_TAIL(&dst->ranges, item, chain);
 	}
 }
 
@@ -468,12 +438,34 @@ struct vmm_ctx *vmm_ctx_dup(const struct vmm_ctx *ctx)
 	dup->dir_paddr = get_paddr((uint32_t)dup->dir);
 	for (size_t i = 0; i < 768; ++i)
 	{
-		if (!ctx->dir[i])
+		if (!(ctx->dir[i] & DIR_FLAG_P))
 		{
-			dup->dir[i] = 0;
+			dup->dir[i] = ctx->dir[i];
 			continue;
 		}
-		dup->dir[i] = 0; /* XXX */
+		dup->dir[i] = mkentry(pmm_alloc_page(), ctx->dir[i] & DIR_FLAG_MASK);
+		uint32_t *tbl_dst = vmap(dup->dir[i] & ~PAGE_MASK, PAGE_SIZE);
+		uint32_t *tbl_src = vmap(ctx->dir[i] & ~PAGE_MASK, PAGE_SIZE);
+		assert(tbl_dst, "can't map dst tbl\n");
+		assert(tbl_src, "can't map src tbl\n");
+		for (size_t j = 0; j < 1024; ++j)
+		{
+			if (!(tbl_src[j] & TBL_FLAG_P))
+			{
+				tbl_dst[j] = tbl_src[j];
+				continue;
+			}
+			tbl_dst[j] = mkentry(pmm_alloc_page(), tbl_src[j] & TBL_FLAG_MASK);
+			uint32_t *pge_dst = vmap(tbl_dst[j] & ~PAGE_MASK, PAGE_SIZE);
+			uint32_t *pge_src = vmap(tbl_src[j] & ~PAGE_MASK, PAGE_SIZE);
+			assert(pge_dst, "can't map dst page\n");
+			assert(pge_src, "can't map src page\n");
+			memcpy(pge_dst, pge_src, PAGE_SIZE);
+			vunmap(pge_dst, PAGE_SIZE);
+			vunmap(pge_src, PAGE_SIZE);
+		}
+		vunmap(tbl_src, PAGE_SIZE);
+		vunmap(tbl_dst, PAGE_SIZE);
 	}
 	for (size_t i = 768; i < 1024; ++i)
 		dup->dir[i] = ctx->dir[i];
@@ -497,9 +489,9 @@ static void vfree_zone(struct vmm_ctx *ctx, void *ptr, size_t size)
 	uint32_t addr = (uint32_t)ptr;
 	assert(!(addr & PAGE_MASK), "free of unaligned addr: 0x%lx\n", addr);
 	assert(!(size & PAGE_MASK), "free of unaligned size: 0x%lx\n", size);
-	vmm_set_free_range(ctx ? &ctx->region : &g_vmm_heap, addr, size);
 	for (uint32_t i = 0; i < size; i += PAGE_SIZE)
 		vmm_free_page(ctx, addr + i);
+	vmm_set_free_range(ctx ? &ctx->region : &g_vmm_heap, addr, size);
 }
 
 void *vmalloc(size_t size)
@@ -595,7 +587,7 @@ void paging_init(uint32_t addr, uint32_t size)
 	init_heap_pages_tables();
 	g_vmm_heap.addr = VADDR_HEAP_BEG;
 	g_vmm_heap.size = VADDR_HEAP_END - VADDR_HEAP_BEG;
-	g_vmm_heap.ranges = NULL;
+	TAILQ_INIT(&g_vmm_heap.ranges);
 }
 
 static void pmm_dumpinfo(void)
@@ -623,7 +615,8 @@ static void pmm_dumpinfo(void)
 static void vmm_dumpinfo(void)
 {
 	printf("kernel heap:\n");
-	for (struct vmm_range *item = g_vmm_heap.ranges; item; item = item->next)
+	struct vmm_range *item;
+	TAILQ_FOREACH(item, &g_vmm_heap.ranges, chain)
 		printf("0x%lx - 0x%lx: 0x%lx bytes\n", item->addr, item->addr + item->size, item->size);
 }
 

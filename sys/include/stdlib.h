@@ -10,6 +10,7 @@ void *malloc(size_t size, uint32_t flags);
 void free(void *ptr);
 void *realloc(void *ptr, size_t size, uint32_t flags);
 void show_alloc_mem(void);
+void alloc_init(void);
 
 int atoi(const char *s);
 int atoin(const char *s, size_t n);

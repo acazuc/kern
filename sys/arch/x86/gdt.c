@@ -48,7 +48,6 @@ struct gdtr
 	uint32_t base;
 } __attribute__((packed));
 
-static uint8_t g_tss_stack[4096 * 4]; /* per-process stack */
 static struct tss_entry g_tss;
 static struct gdtr g_gdtr;
 
@@ -88,6 +87,11 @@ static void encode_entry(uint8_t *target, const struct gdt_entry *source)
 	target[7] = (source->base >> 24) & 0xFF;
 }
 
+void tss_set_ptr(void *ptr)
+{
+	g_tss.esp0 = (uint32_t)ptr;
+}
+
 void gdt_init(void)
 {
 	for (size_t i = 0; i < sizeof(g_gdt_entries) / sizeof(*g_gdt_entries); ++i)
@@ -96,7 +100,7 @@ void gdt_init(void)
 	g_gdtr.limit = (uint16_t)sizeof(gdt_data) - 1;
 	memset(&g_tss, 0, sizeof(g_tss));
 	g_tss.ss0 = 0x10;
-	g_tss.esp0 = (uint32_t)&g_tss_stack[sizeof(g_tss_stack)];
+	g_tss.esp0 = 0;
 	__asm__ volatile ("lgdt %0" : : "m"(g_gdtr));
 	__asm__ volatile ("mov $0x28, %%ax; ltr %%ax" ::: "eax");
 	reload_segments();

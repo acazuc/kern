@@ -18,9 +18,9 @@
 #include <sys/file.h>
 #include <sys/proc.h>
 #include <inttypes.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <cpuid.h>
 
 int g_isa_irq[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
 
@@ -306,6 +306,7 @@ static void idle_loop()
 void boot(struct multiboot_info *mb_info)
 {
 	cli();
+	alloc_init();
 	vga_init();
 	printf("\n");
 	printf("x86 boot @ %p\n", boot);
@@ -353,6 +354,16 @@ void boot(struct multiboot_info *mb_info)
 		vmm_dup(thread->proc->vmm_ctx, NULL, 0x400000, 0x4000); /* XXX remove */
 		sched_add(thread);
 		t2 = thread;
+	}
+	{
+		struct file *file;
+		struct fs_node *elf;
+		assert(!vfs_getnode(NULL, "/bin/sh", &elf), "can't open /bin/sh");
+		file = malloc(sizeof(*file), 0);
+		file->op = elf->fop;
+		file->node = elf;
+		file->off = 0;
+		struct thread *elf_thread = elf_createproc(file);
 	}
 	/* added after init to avoid buggy scheduling on page fault interrupt */
 	sched_run(t1);

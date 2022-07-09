@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/sched.h>
+#include <sys/file.h>
 #include <stdio.h>
 
 #include "arch/x86/asm.h"
@@ -11,6 +12,7 @@ struct thread *curthread;
 struct proc *curproc;
 
 static pid_t g_pid;
+static pid_t g_tid;
 
 static struct thread *proc_create(const char *name, void *entry)
 {
@@ -44,6 +46,10 @@ static struct thread *proc_create(const char *name, void *entry)
 	thread->stack_size = 1024 * 16;
 	thread->stack = vmalloc_user(proc->vmm_ctx, thread->stack_size);
 	assert(thread->stack, "can't allocate thread stack\n");
+	thread->int_stack_size = 1024 * 4;
+	thread->int_stack = vmalloc(thread->int_stack_size);
+	assert(thread->int_stack, "can't allocate thread int stack\n");
+	memset(thread->int_stack, 0, thread->int_stack_size); /* memory must be mapped */
 	return thread;
 }
 
@@ -65,18 +71,28 @@ struct thread *kproc_create(const char *name, void *entry)
 	return thread;
 }
 
-struct proc *proc_fork(struct proc *proc)
+struct thread *proc_fork(struct thread *thread)
 {
+	struct proc *proc = thread->proc;
 	struct proc *newp = malloc(sizeof(*newp), M_ZERO);
 	assert(newp, "can't allocate new proc\n");
 	newp->name = strdup(proc->name);
 	assert(newp->name, "can't allocate new proc name\n");
 	newp->vmm_ctx = vmm_ctx_dup(proc->vmm_ctx);
 	newp->entrypoint = proc->entrypoint;
-	newp->files = proc->files; /* XXX: incref all the files */
+	newp->files = malloc(sizeof(*newp->files) * proc->files_nb, 0);
+	assert(newp->files, "can't allocate new proc files\n");
+	for (size_t i = 0; i < proc->files_nb; ++i)
+	{
+		newp->files[i] = proc->files[i];
+		if (newp->files[i])
+			newp->files[i]->refcount++;
+	}
 	newp->files_nb = proc->files_nb;
-	newp->root = proc->root; /* XXX incref */
-	newp->cwd = proc->cwd; /* incref */
+	newp->root = proc->root;
+	newp->root->refcount++;
+	newp->cwd = proc->cwd;
+	newp->cwd->refcount++;
 	newp->umask = proc->umask;
 	newp->pid = ++g_pid;
 	newp->ppid = proc->pid;
@@ -90,29 +106,26 @@ struct proc *proc_fork(struct proc *proc)
 	newp->sgid = proc->sgid;
 	newp->pri = proc->pri;
 	TAILQ_INIT(&newp->threads);
-	struct thread *thread;
-	TAILQ_FOREACH(thread, &proc->threads, thread_chain)
-	{
-		struct thread *newt = malloc(sizeof(*newt), M_ZERO);
-		assert(newt, "can't allocate new thread\n");
-		newt->proc = newp;
-		newt->state = thread->state;
-		if (newt->state == THREAD_RUNNING)
-			newt->state = THREAD_PAUSED;
-		newt->trapframe = thread->trapframe;
-		newt->stack_size = thread->stack_size; /* XXX handle */
-		newt->stack = thread->stack; /* XXX already copied by vmm_ctx_dup, what to do ? */
-		newt->tid = thread->tid; /* XXX */
-		newt->pri = thread->pri; /* XXX */
-		if (thread == curthread) /* XXX: hask, set ret of fork to 0 for child */
-			newt->trapframe.eax = 0;
-		TAILQ_INSERT_TAIL(&newp->threads, newt, thread_chain);
-	}
-	TAILQ_FOREACH(thread, &newp->threads, thread_chain)
-	{
-		sched_add(thread);
-		if (thread->state == THREAD_PAUSED)
-			sched_run(thread);
-	}
-	return newp;
+	struct thread *newt = malloc(sizeof(*newt), M_ZERO);
+	assert(newt, "can't allocate new thread\n");
+	newt->proc = newp;
+	newt->state = thread->state;
+	if (newt->state == THREAD_RUNNING)
+		newt->state = THREAD_PAUSED;
+	newt->trapframe = thread->trapframe;
+	newt->stack_size = thread->stack_size; /* XXX handle */
+	newt->stack = thread->stack; /* XXX already copied by vmm_ctx_dup, what to do ? */
+	newt->int_stack_size = thread->int_stack_size;
+	newt->int_stack = vmalloc(newt->int_stack_size);
+	assert(newt->int_stack, "can't allocate new thread int stack\n");
+	memset(newt->int_stack, 0, thread->int_stack_size); /* memory must be mapped */
+	newt->tid = ++g_tid;
+	newt->pri = thread->pri;
+	if (thread == curthread) /* XXX: hack, set ret of fork to 0 for child */
+		newt->trapframe.eax = 0;
+	TAILQ_INSERT_TAIL(&newp->threads, newt, thread_chain);
+	sched_add(newt);
+	if (newt->state == THREAD_PAUSED)
+		sched_run(newt);
+	return newt;
 }

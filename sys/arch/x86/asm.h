@@ -97,4 +97,13 @@ static inline void setcr3(uint32_t addr)
 	__asm__ volatile ("mov %0, %%cr3" : : "a"(addr));
 }
 
+static inline uint32_t getcr2(void)
+{
+	uint32_t ret;
+	__asm__ volatile ("mov %%cr2, %0" : "=a"(ret));
+	return ret;
+}
+
+#define __cpuid(n, eax, ebx, ecx, edx) __asm__ volatile ("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(n))
+
 #endif

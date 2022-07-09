@@ -43,6 +43,7 @@ typedef struct
 #define EM_386 3
 #define EM_68K 4
 #define EM_88K 5
+#define EM_IAMCU 6
 #define EM_860 7
 #define EM_MIPS 8
 
