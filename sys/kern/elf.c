@@ -39,21 +39,34 @@ struct thread *elf_createproc(struct file *file)
 	assert(hdr->e_shoff < len, "section header outside of file\n");
 	assert(hdr->e_shentsize >= sizeof(Elf32_Shdr), "section entry size too low\n");
 	assert(hdr->e_shoff + hdr->e_shentsize * hdr->e_shnum <= len, "section header end outside of file\n");
-	printf("sections count: %lu\n", hdr->e_shnum);
-	for (size_t i = 0; i < hdr->e_shnum; ++i)
-	{
-		Elf32_Shdr *shdr = (Elf32_Shdr*)(&data[hdr->e_shoff + hdr->e_shentsize * i]);
-		printf("section name: %lx\n", shdr->sh_name);
-	}
 
 	assert(hdr->e_phoff < len, "program header outside of file\n");
 	assert(hdr->e_phentsize >= sizeof(Elf32_Phdr), "program entry size too low\n");
 	assert(hdr->e_phoff + hdr->e_phentsize * hdr->e_phnum <= len, "program header end outside of file\n");
-	printf("programs count: %lu\n", hdr->e_phnum);
+
+	struct vmm_ctx *vmm_ctx = create_vmm_ctx();
+	assert(vmm_ctx, "can't create vmm ctx\n");
+
+	size_t base_addr = 0x100000; /* XXX: ask to vmm_ctx for real base addr */
 	for (size_t i = 0; i < hdr->e_phnum; ++i)
 	{
 		Elf32_Phdr *phdr = (Elf32_Phdr*)(&data[hdr->e_phoff + hdr->e_phentsize * i]);
-		printf("program type: %lx\n", phdr->p_type);
+		if (phdr->p_type == PT_LOAD)
+		{
+			size_t addr = phdr->p_vaddr;
+			addr -= addr % PAGE_SIZE;
+			size_t size = phdr->p_memsz;
+			size += phdr->p_vaddr - addr;
+			size += PAGE_SIZE - 1;
+			size -= size % PAGE_SIZE;
+			printf("allocate %lx bytes at %lx\n", size, addr);
+			void *ptr = vmalloc_user(vmm_ctx, (void*)(addr + base_addr), size);
+			assert(ptr, "can't allocate program header\n");
+			void *dst = vmap_user(vmm_ctx, ptr, size);
+			assert(dst, "can't vmap user\n");
+			/* XXX memcpy */
+			vunmap(dst, size);
+		}
 	}
 
 	//while (1) {}

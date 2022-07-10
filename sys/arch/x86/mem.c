@@ -25,8 +25,8 @@
 /*
  * virtual memory layout
  *
- * 0x00000000 - 0x000FFFFF (16  MB): unused
- * 0x00001000 - 0xBFFFFFFF (3.2 GB): userland
+ * 0x00000000 - 0x000FFFFF (1.0 MB): unused
+ * 0x00100000 - 0xBFFFFFFF (3.2 GB): userland
  * 0xC0000000 - 0xC03FFFFF (4.0 MB): kernel binary
  * 0xC0400000 - 0xC07FFFFF (4.0 MB): physical bitmap
  * 0xC0800000 - 0xC0BFFFFF (4.0 MB): kern heap page tables
@@ -285,7 +285,7 @@ static void vmm_unmap_page(uint32_t addr)
 /* that's a bit of sad code, it somehow should be simplified */
 static uint32_t vmm_get_free_range(struct vmm_region *region, uint32_t addr, uint32_t size)
 {
-	if (addr && (addr < region->addr || addr + size >= region->addr + region->size))
+	if (addr && (addr < region->addr || addr + size > region->addr + region->size))
 		return UINT32_MAX;
 	if (TAILQ_EMPTY(&region->ranges))
 	{
@@ -605,6 +605,15 @@ void *vmap(size_t paddr, size_t size)
 	for (uint32_t i = 0; i < size; i += PAGE_SIZE)
 		vmm_map_page(addr + i, paddr + i);
 	return (void*)addr;
+}
+
+void *vmap_user(struct vmm_ctx *ctx, void *ptr, size_t size)
+{
+	uint32_t addr = (uint32_t)ptr;
+	assert(!(addr & PAGE_MASK), "vmap unaligned addr 0x%lx\n", addr);
+	assert(!(size  & PAGE_MASK), "vmap unaligned size 0x%lx\n", size);
+	/* XXX */
+	return NULL;
 }
 
 void vunmap(void *ptr, size_t size)

@@ -44,7 +44,7 @@ static struct thread *proc_create(const char *name, void *entry)
 	proc->sgid = 0;
 	thread->state = THREAD_PAUSED;
 	thread->stack_size = 1024 * 16;
-	thread->stack = vmalloc_user(proc->vmm_ctx, NULL, thread->stack_size);
+	thread->stack = vmalloc_user(proc->vmm_ctx, (void*)(0xC0000000 - thread->stack_size), thread->stack_size);
 	assert(thread->stack, "can't allocate thread stack\n");
 	thread->int_stack_size = 1024 * 4;
 	thread->int_stack = vmalloc(thread->int_stack_size);
