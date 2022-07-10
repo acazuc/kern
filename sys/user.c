@@ -246,8 +246,9 @@ static void exec_line(const char *line)
 			return;
 		}
 		write(g_fd, "child\n", 6);
-		while (1)
-			exit(0);
+		return;
+		//while (1)
+		//	exit(0);
 	}
 	if (!strcmp(line, "pid"))
 	{

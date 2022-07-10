@@ -86,7 +86,6 @@ static void handle_general_protection_fault(const struct int_ctx *ctx)
 static void handle_page_fault(const struct int_ctx *ctx)
 {
 	uint32_t page_addr = getcr2();
-	printf("page protection violation addr 0x%08lx: 0x%08lx @ 0x%08lx\n", page_addr, ctx->err, ctx->trapframe.eip);
 	if (!(ctx->err & 1))
 	{
 		paging_alloc(page_addr);

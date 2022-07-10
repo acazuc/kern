@@ -27,7 +27,6 @@ SRC_NAME = kernel.c \
            arch/x86/idt.s \
            arch/x86/isr.c \
            arch/x86/mem.c \
-           arch/x86/user.s \
            arch/x86/sys.c \
            dev/pic/pic.c \
            dev/vga/vga.c \
@@ -127,6 +126,9 @@ run: all $(DISK_FILE)
 	-device usb-ehci,id=ehci \
 	-nic user,model=e1000 \
 	-kernel $(BIN_NAME)
+
+size:
+	@wc `find $(SRC_PATH) -type f \( -name \*.c -o -name \*.h -o -name \*.s -o -name \*.S \)` | tail -n 1
 
 clean:
 	@rm -f $(OBJ)

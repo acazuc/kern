@@ -82,7 +82,7 @@ struct page
 	uint32_t blocks[];
 };
 
-static TAILQ_HEAD(, page) g_pages;
+static TAILQ_HEAD(, page) g_pages; /* XXX: one tailq per block size ? */
 
 static enum block_type get_block_type(size_t size)
 {
@@ -106,8 +106,8 @@ static struct page *alloc_page(enum block_type type, size_t size)
 	else
 		blocks_size = 0;
 	meta_size = sizeof(*page) + blocks_size;
-	if (meta_size < size) /* align data blocks on data size */
-		meta_size = size;
+	meta_size += size + 1; /* align blocks */
+	meta_size -= meta_size % size;
 	alloc_size = size + meta_size;
 	alloc_size += PAGE_SIZE - 1;
 	alloc_size -= alloc_size % PAGE_SIZE;
@@ -220,20 +220,15 @@ static void *realloc_large(struct page *lst, void *ptr, size_t size, uint32_t fl
 
 static void *realloc_blocky(struct page *lst, void *ptr, size_t size, uint32_t flags)
 {
-	void *addr;
-
 	if (size <= g_block_sizes[lst->type])
 	{
 		MALLOC_UNLOCK();
 		return ptr;
 	}
 	MALLOC_UNLOCK();
-	addr = malloc(size, flags);
+	void *addr = malloc(size, flags);
 	if (!addr)
-	{
-		MALLOC_UNLOCK();
 		return NULL;
-	}
 	memcpy(addr, ptr, g_block_sizes[lst->type]);
 	free(ptr);
 	return addr;
@@ -282,7 +277,7 @@ void free(void *ptr)
 			return;
 		}
 		if ((uint8_t*)ptr < lst->addr
-		 || (uint8_t*)ptr > lst->addr + g_block_sizes[lst->type] * BLOCKS_COUNT)
+		 || (uint8_t*)ptr >= lst->addr + g_block_sizes[lst->type] * BLOCKS_COUNT)
 			continue;
 		size_t item = ((uint8_t*)ptr - lst->addr) / g_block_sizes[lst->type];
 		if (lst->addr + g_block_sizes[lst->type] * item != (uint8_t*)ptr)
@@ -320,14 +315,14 @@ void *realloc(void *ptr, size_t size, uint32_t flags)
 				continue;
 			return realloc_large(lst, ptr, size, flags);
 		}
-		if ((uint8_t*)ptr >= lst->addr
-		 && (uint8_t*)ptr <= lst->addr + g_block_sizes[lst->type] * BLOCKS_COUNT)
-		{
-			uint32_t item = ((uint8_t*)ptr - lst->addr) / g_block_sizes[lst->type];
-			if (lst->addr + g_block_sizes[lst->type] * item == ptr)
-				return realloc_blocky(lst, ptr, size, flags);
-			return NULL;
-		}
+		if ((uint8_t*)ptr < lst->addr
+		 || (uint8_t*)ptr >= lst->addr + g_block_sizes[lst->type] * BLOCKS_COUNT)
+			continue;
+		uint32_t item = ((uint8_t*)ptr - lst->addr) / g_block_sizes[lst->type];
+		if (lst->addr + g_block_sizes[lst->type] * item == ptr)
+			return realloc_blocky(lst, ptr, size, flags);
+		MALLOC_UNLOCK();
+		return NULL;
 	}
 	MALLOC_UNLOCK();
 	return NULL;

@@ -44,7 +44,7 @@ static struct thread *proc_create(const char *name, void *entry)
 	proc->sgid = 0;
 	thread->state = THREAD_PAUSED;
 	thread->stack_size = 1024 * 16;
-	thread->stack = vmalloc_user(proc->vmm_ctx, thread->stack_size);
+	thread->stack = vmalloc_user(proc->vmm_ctx, NULL, thread->stack_size);
 	assert(thread->stack, "can't allocate thread stack\n");
 	thread->int_stack_size = 1024 * 4;
 	thread->int_stack = vmalloc(thread->int_stack_size);
@@ -112,17 +112,15 @@ struct thread *proc_fork(struct thread *thread)
 	newt->state = thread->state;
 	if (newt->state == THREAD_RUNNING)
 		newt->state = THREAD_PAUSED;
-	newt->trapframe = thread->trapframe;
-	newt->stack_size = thread->stack_size; /* XXX handle */
-	newt->stack = thread->stack; /* XXX already copied by vmm_ctx_dup, what to do ? */
+	memcpy(&newt->trapframe, &thread->trapframe, sizeof(newt->trapframe));
+	newt->stack_size = thread->stack_size;
+	newt->stack = thread->stack; /* already copied by vmm_ctx_dup */
 	newt->int_stack_size = thread->int_stack_size;
 	newt->int_stack = vmalloc(newt->int_stack_size);
 	assert(newt->int_stack, "can't allocate new thread int stack\n");
 	memset(newt->int_stack, 0, thread->int_stack_size); /* memory must be mapped */
 	newt->tid = ++g_tid;
 	newt->pri = thread->pri;
-	if (thread == curthread) /* XXX: hack, set ret of fork to 0 for child */
-		newt->trapframe.eax = 0;
 	TAILQ_INSERT_TAIL(&newp->threads, newt, thread_chain);
 	sched_add(newt);
 	if (newt->state == THREAD_PAUSED)

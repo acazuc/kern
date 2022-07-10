@@ -39,6 +39,7 @@ static int sys_fork()
 	struct thread *thread = proc_fork(curthread);
 	if (!thread)
 		return -EAGAIN;
+	thread->trapframe.eax = 0;
 	return thread->proc->pid;
 }
 
