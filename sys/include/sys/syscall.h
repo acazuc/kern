@@ -8,6 +8,8 @@
 #define SYS_OPEN      5
 #define SYS_CLOSE     6
 
+#define SYS_EXECVE    11
+
 #define SYS_TIME      13
 
 #define SYS_STAT      18

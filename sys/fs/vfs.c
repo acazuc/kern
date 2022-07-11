@@ -66,6 +66,12 @@ void fs_node_decref(struct fs_node *node)
 	/* XXX: do something */
 }
 
+void fs_node_incref(struct fs_node *node)
+{
+	node->refcount++;
+	/* XXX do something */
+}
+
 void vfs_init(void)
 {
 	struct fs_sb *ramfs = ramfs_init();

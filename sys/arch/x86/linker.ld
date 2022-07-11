@@ -19,37 +19,7 @@ SECTIONS
 		*(.multiboot.bss)
 	}
 
-	_boot_end = .;
-
-	. = 4M;
-
-	.userland.text BLOCK(4K) : ALIGN(4K)
-	{
-		obj/user.c.o(.text)
-		obj/user.s.o(.text)
-	}
-
-	.userland.rodata BLOCK(4K) : ALIGN(4K)
-	{
-		obj/user.c.o(.rodata*)
-		obj/user.s.o(.rodata*)
-	}
-
-	.userland.data BLOCK(4K) : ALIGN(4K)
-	{
-		obj/user.c.o(.data)
-		obj/user.s.o(.data)
-	}
-
-	.userland.bss BLOCK(4K) : ALIGN(4K)
-	{
-		obj/user.c.o(COMMON)
-		obj/user.s.o(COMMON)
-		obj/user.c.o(.bss)
-		obj/user.s.o(.bss)
-	}
-
-	. = _boot_end + 0xC0000000;
+	. += 0xC0000000;
 
 	.text BLOCK(4K) : AT(ADDR(.text) - 0xC0000000)
 	{

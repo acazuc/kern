@@ -26,7 +26,8 @@ int g_isa_irq[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
 
 static int has_apic; /* XXX */
 
-void userland(void);
+struct thread *idle_thread;
+struct proc *idle_proc;
 
 enum cpuid_feature
 {
@@ -303,13 +304,13 @@ static void idle_loop()
 	}
 }
 
-void boot(struct multiboot_info *mb_info)
+void kernel_main(struct multiboot_info *mb_info)
 {
 	cli();
 	alloc_init();
 	vga_init();
 	printf("\n");
-	printf("x86 boot @ %p\n", boot);
+	printf("x86 boot @ %p\n", kernel_main);
 	print_multiboot(mb_info);
 	print_cpuid();
 	uint32_t mem_size = mb_get_memory_map_size(mb_info);
@@ -336,25 +337,14 @@ void boot(struct multiboot_info *mb_info)
 	ps2_init();
 	ide_init();
 	sched_init();
-	struct thread *idle_thread = kproc_create("idle", idle_loop);
+	idle_thread = kproc_create("idle", idle_loop);
 	idle_thread->pri = 255;
+	idle_proc = idle_thread->proc;
 	sched_add(idle_thread);
 	idle_thread->state = THREAD_RUNNING;
 	curthread = idle_thread;
 	curproc = curthread->proc;
-	struct thread *t1, *t2;
-	{
-		struct thread *thread = uproc_create("init", userland);
-		vmm_dup(thread->proc->vmm_ctx, NULL, 0x400000, 0x4000); /* XXX remove */
-		sched_add(thread);
-		t1 = thread;
-	}
-	{
-		struct thread *thread = uproc_create("init", userland);
-		vmm_dup(thread->proc->vmm_ctx, NULL, 0x400000, 0x4000); /* XXX remove */
-		sched_add(thread);
-		t2 = thread;
-	}
+	struct thread *thread;
 	{
 		struct file *file;
 		struct fs_node *elf;
@@ -363,11 +353,10 @@ void boot(struct multiboot_info *mb_info)
 		file->op = elf->fop;
 		file->node = elf;
 		file->off = 0;
-		struct thread *elf_thread = elf_createproc(file);
+		thread = uproc_create_elf("sh", file);
 	}
 	/* added after init to avoid buggy scheduling on page fault interrupt */
-	sched_run(t1);
-	sched_run(t2);
+	sched_run(thread);
 	idle_loop();
 	panic("post idle loop\n");
 

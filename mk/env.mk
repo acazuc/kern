@@ -26,7 +26,7 @@ CFLAGS = -std=c99 \
          -fno-pie \
          -fno-pic \
          -nostdinc \
-         -isystem $(INCLUDE_DIR) \
+         -isystem $(INCLUDE_SYSDIR) \
          -iquote $(SRC_PATH)
 
 LDFLAGS = -ffreestanding \

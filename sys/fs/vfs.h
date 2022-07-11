@@ -72,6 +72,7 @@ struct fs_node_op
 
 int vfs_getnode(struct fs_node *dir, const char *path, struct fs_node **node);
 void fs_node_decref(struct fs_node *node);
+void fs_node_incref(struct fs_node *node);
 
 void vfs_init(void);
 

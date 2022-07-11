@@ -252,21 +252,58 @@ static void vmm_free_page(struct vmm_ctx *ctx, uint32_t addr)
 static void vmm_map_page(uint32_t addr, uint32_t paddr)
 {
 	assert(!(addr & PAGE_MASK), "vmap unaligned page 0x%lx\n", addr);
+	assert(!(paddr & PAGE_MASK), "vmap unaligned physical page 0x%lx\n", addr);
 	uint32_t dir_id = DIR_ID(addr);
-	uint32_t dir = DIR_VADDR[dir_id];
-	if (!(dir & DIR_FLAG_P))
+	uint32_t *dir = &DIR_VADDR[dir_id];
+	if (!(*dir & DIR_FLAG_P))
 	{
-		dir = mkentry(pmm_alloc_page(), DIR_FLAG_RW | DIR_FLAG_P);
-		DIR_VADDR[dir_id] = dir;
+		*dir = mkentry(pmm_alloc_page(), DIR_FLAG_RW | DIR_FLAG_P);
 		memset(TBL_VADDR(dir_id), 0, PAGE_SIZE);
 	}
 	uint32_t *tbl_ptr = TBL_VADDR(dir_id);
 	uint32_t tbl_id = TBL_ID(addr);
-	uint32_t tbl = tbl_ptr[tbl_id];
-	assert(!(tbl & TBL_FLAG_P), "vmap already created page 0x%lx\n", addr);
-	assert(!(tbl & TBL_FLAG_V), "vmap already allocated page 0x%lx\n", addr);
-	tbl_ptr[tbl_id] = mkentry(paddr, TBL_FLAG_RW | TBL_FLAG_P);
+	uint32_t *tbl = &tbl_ptr[tbl_id];
+	assert(!(*tbl & TBL_FLAG_P), "vmap already created page 0x%lx\n", addr);
+	assert(!(*tbl & TBL_FLAG_V), "vmap already allocated page 0x%lx\n", addr);
+	*tbl = mkentry(paddr, TBL_FLAG_RW | TBL_FLAG_P);
 	invlpg(addr);
+}
+
+static void vmm_map_user_page(struct vmm_ctx *ctx, uint32_t addr, uint32_t uaddr)
+{
+	assert(!(addr & PAGE_MASK), "vmap unaligned page 0x%lx\n", addr);
+	assert(!(uaddr & PAGE_MASK), "vmap unaligned user page 0x%lx\n", uaddr);
+	uint32_t dir_id = DIR_ID(uaddr);
+	uint32_t *dir = &ctx->dir[dir_id];
+	uint32_t *tbl_ptr;
+	if (!(*dir & DIR_FLAG_P))
+	{
+		uint32_t paddr = pmm_alloc_page();
+		*dir = mkentry(paddr, DIR_FLAG_RW | DIR_FLAG_P | DIR_FLAG_US);
+		tbl_ptr = vmap(paddr, PAGE_SIZE);
+		assert(tbl_ptr, "can't vmap tbl\n");
+		memset(tbl_ptr, 0, PAGE_SIZE);
+	}
+	else
+	{
+		tbl_ptr = vmap(*dir & ~PAGE_MASK, PAGE_SIZE);
+		assert(tbl_ptr, "can't vmap tbl\n");
+	}
+	uint32_t tbl_id = TBL_ID(uaddr);
+	uint32_t *tbl = &tbl_ptr[tbl_id];
+	uint32_t paddr;
+	if (*tbl & TBL_FLAG_P)
+	{
+		paddr = *tbl & ~PAGE_MASK;
+	}
+	else
+	{
+		assert((*tbl & TBL_FLAG_V), "vmap non allocated page 0x%lx\n", uaddr);
+		paddr = pmm_alloc_page();
+		*tbl = mkentry(paddr, TBL_FLAG_RW | TBL_FLAG_P | TBL_FLAG_US);
+	}
+	vunmap(tbl_ptr, PAGE_SIZE);
+	vmm_map_page(addr, paddr);
 }
 
 static void vmm_unmap_page(uint32_t addr)
@@ -449,7 +486,7 @@ static struct vmm_ctx *alloc_vmm_ctx(void)
 	return vmalloc(size);
 }
 
-struct vmm_ctx *create_vmm_ctx(void)
+struct vmm_ctx *vmm_ctx_create(void)
 {
 	struct vmm_ctx *ctx = alloc_vmm_ctx();
 	assert(ctx, "can't allocate new vmm ctx\n");
@@ -463,33 +500,26 @@ struct vmm_ctx *create_vmm_ctx(void)
 	return ctx;
 }
 
-/* XXX: to be removed */
-static void vmm_dup_page(struct vmm_ctx *dst, const struct vmm_ctx *src, uint32_t addr)
+void vmm_ctx_delete(struct vmm_ctx *ctx)
 {
-	/* XXX: real way to do it ? */
-	uint32_t dir_id = DIR_ID(addr);
-	const uint32_t *dir_src = src ? &src->dir[dir_id] : &DIR_VADDR[dir_id];
-	uint32_t *dir_dst = dst ? &dst->dir[dir_id] : &DIR_VADDR[dir_id];
-	*dir_dst = *dir_src;
-	if (*dir_src & DIR_FLAG_P)
+	for (size_t i = 0; i < 768; ++i)
 	{
-		uint32_t tbl_id = TBL_ID(addr);
-		uint32_t *tbl_src = vmap(*dir_src & ~PAGE_MASK, PAGE_SIZE);
-		uint32_t *tbl_dst = vmap(*dir_dst & ~PAGE_MASK, PAGE_SIZE);
-		assert(tbl_src, "can't map tbl src\n");
-		assert(tbl_dst, "can't map tbl dst\n");
-		tbl_dst[tbl_id] = tbl_src[tbl_id];
-		vunmap(tbl_src, PAGE_SIZE);
-		vunmap(tbl_dst, PAGE_SIZE);
+		if (!(ctx->dir[i] & DIR_FLAG_P))
+			continue;
+		uint32_t *tbl_ptr = vmap(ctx->dir[i] & ~PAGE_MASK, PAGE_SIZE);
+		assert(tbl_ptr, "can't map tbl ptr\n");
+		for (size_t j = 0; j < 1024; ++j)
+		{
+			if (!(tbl_ptr[j] & TBL_FLAG_P))
+				continue;
+			pmm_free_page(tbl_ptr[j] & ~PAGE_MASK);
+		}
+		vunmap(tbl_ptr, PAGE_SIZE);
+		pmm_free_page(ctx->dir[i] & ~PAGE_MASK);
 	}
-}
-
-void vmm_dup(struct vmm_ctx *dst, const struct vmm_ctx *src, uint32_t addr, uint32_t size)
-{
-	assert(!(addr & PAGE_MASK), "dup unaligned addr: 0x%lx\n", addr);
-	assert(!(size & PAGE_MASK), "dup unaligned size: 0x%lx\n", size);
-	for (uint32_t i = 0; i < size; i += PAGE_SIZE)
-		vmm_dup_page(dst, src, addr + i);
+	size_t size = sizeof(*ctx) + PAGE_SIZE - 1;
+	size -= size % PAGE_SIZE;
+	vunmap(ctx, size);
 }
 
 static void dup_region(struct vmm_region *dst, const struct vmm_region *src)
@@ -609,11 +639,17 @@ void *vmap(size_t paddr, size_t size)
 
 void *vmap_user(struct vmm_ctx *ctx, void *ptr, size_t size)
 {
-	uint32_t addr = (uint32_t)ptr;
-	assert(!(addr & PAGE_MASK), "vmap unaligned addr 0x%lx\n", addr);
-	assert(!(size  & PAGE_MASK), "vmap unaligned size 0x%lx\n", size);
-	/* XXX */
-	return NULL;
+	assert(ctx, "no vmm ctx given\n");
+	uint32_t uaddr = (uint32_t)ptr;
+	assert(!(uaddr & PAGE_MASK), "vmap unaligned addr 0x%lx\n", uaddr);
+	assert(!(size & PAGE_MASK), "vmap unaligned size 0x%lx\n", size);
+	uint32_t addr = vmm_get_free_range(&g_vmm_heap, 0, size);
+	if (addr == UINT32_MAX)
+		return NULL;
+	assert(!(addr & PAGE_MASK), "vmap unaligned data 0x%lx\n", addr);
+	for (uint32_t i = 0; i < size; i += PAGE_SIZE)
+		vmm_map_user_page(ctx, addr + i, uaddr + i);
+	return (void*)addr;
 }
 
 void vunmap(void *ptr, size_t size)

@@ -16,8 +16,9 @@
  * like multiple struct page inside a metadata page allocation
  */
 
-#define BLOCKS_SIZE ((BLOCKS_COUNT + 31) / 32)
+#define BLOCKS_SIZE ((BLOCKS_COUNT + BLOCK_BITS - 1) / BLOCK_BITS)
 #define BLOCKS_COUNT 128 /* XXX: per-block type size */
+#define BLOCK_BITS (sizeof(size_t) * 8)
 
 #define MALLOC_LOCK()
 #define MALLOC_UNLOCK()
@@ -76,13 +77,14 @@ static const size_t g_block_sizes[] =
 struct page
 {
 	enum block_type type;
-	size_t size;
+	size_t page_size; /* size of vmalloc */
+	size_t data_size; /* size of payload (for large) */
 	uint8_t *addr;
 	TAILQ_ENTRY(page) chain;
-	uint32_t blocks[];
+	size_t blocks[];
 };
 
-static TAILQ_HEAD(, page) g_pages; /* XXX: one tailq per block size ? */
+static TAILQ_HEAD(, page) g_pages[BLOCK_LARGE + 1];
 
 static enum block_type get_block_type(size_t size)
 {
@@ -102,7 +104,7 @@ static struct page *alloc_page(enum block_type type, size_t size)
 	size_t meta_size;
 
 	if (type != BLOCK_LARGE)
-		blocks_size = sizeof(uint32_t) * BLOCKS_SIZE;
+		blocks_size = sizeof(size_t) * BLOCKS_SIZE;
 	else
 		blocks_size = 0;
 	meta_size = sizeof(*page) + blocks_size;
@@ -116,7 +118,8 @@ static struct page *alloc_page(enum block_type type, size_t size)
 	if (!page)
 		return NULL;
 	page->type = type;
-	page->size = alloc_size;
+	page->page_size = alloc_size;
+	page->data_size = size;
 	page->addr = (uint8_t*)page + meta_size;
 	memset(page->blocks, 0, blocks_size);
 	return page;
@@ -137,7 +140,7 @@ static void check_free_pages(enum block_type type)
 	int one_free = 0;
 	struct page *lst;
 	struct page *nxt;
-	TAILQ_FOREACH_SAFE(lst, &g_pages, chain, nxt)
+	TAILQ_FOREACH_SAFE(lst, &g_pages[type], chain, nxt)
 	{
 		if (lst->type != type || !is_page_free(lst))
 			continue;
@@ -146,8 +149,8 @@ static void check_free_pages(enum block_type type)
 			one_free = 1;
 			continue;
 		}
-		TAILQ_REMOVE(&g_pages, lst, chain);
-		vfree(lst, lst->size);
+		TAILQ_REMOVE(&g_pages[type], lst, chain);
+		vfree(lst, lst->page_size);
 	}
 }
 
@@ -159,7 +162,7 @@ static void *create_new_block(enum block_type type, size_t size)
 	if (!page)
 		return NULL;
 	page->blocks[0] = 1;
-	TAILQ_INSERT_TAIL(&g_pages, page, chain);
+	TAILQ_INSERT_TAIL(&g_pages[type], page, chain);
 	return page->addr;
 }
 
@@ -167,13 +170,13 @@ static int get_first_free(struct page *page)
 {
 	for (size_t i = 0; i < BLOCKS_SIZE; ++i)
 	{
-		if (page->blocks[i] == 0xFFFFFFFF)
+		if (page->blocks[i] == (size_t)-1)
 			continue;
-		uint32_t block = page->blocks[i];
-		for (uint32_t j = 0; j < 32; ++j)
+		size_t block = page->blocks[i];
+		for (size_t j = 0; j < BLOCK_BITS; ++j)
 		{
 			if (!(block & (1 << j)))
-				return i * 32 + j;
+				return i * BLOCK_BITS + j;
 		}
 		panic("block != 0xFFFFFFFF but no bit found");
 	}
@@ -183,14 +186,14 @@ static int get_first_free(struct page *page)
 static void *get_existing_block(enum block_type type)
 {
 	struct page *lst;
-	TAILQ_FOREACH(lst, &g_pages, chain)
+	TAILQ_FOREACH(lst, &g_pages[type], chain)
 	{
 		if (lst->type != type)
 			continue;
 		int i = get_first_free(lst);
 		if (i == -1)
 			continue;
-		lst->blocks[i / 32] |= (1 << i % 32);
+		lst->blocks[i / BLOCK_BITS] |= (1 << i % BLOCK_BITS);
 		return lst->addr + i * g_block_sizes[type];
 	}
 	return NULL;
@@ -208,12 +211,12 @@ static void *realloc_large(struct page *lst, void *ptr, size_t size, uint32_t fl
 		MALLOC_UNLOCK();
 		return NULL;
 	}
-	len = lst->size - sizeof(*lst);
+	len = lst->data_size - sizeof(*lst);
 	if (size < len)
 		len = size;
 	memcpy(addr, ptr, len);
-	TAILQ_REMOVE(&g_pages, lst, chain);
-	vfree(lst, lst->size);
+	TAILQ_REMOVE(&g_pages[lst->type], lst, chain);
+	vfree(lst, lst->page_size);
 	MALLOC_UNLOCK();
 	return addr;
 }
@@ -265,31 +268,34 @@ void free(void *ptr)
 		return;
 	MALLOC_LOCK();
 	struct page *lst;
-	TAILQ_FOREACH(lst, &g_pages, chain)
+	for (size_t i = 0; i < sizeof(g_pages) / sizeof(*g_pages); ++i)
 	{
-		if (lst->type == BLOCK_LARGE)
+		TAILQ_FOREACH(lst, &g_pages[i], chain)
 		{
-			if (ptr != lst->addr)
+			if (lst->type == BLOCK_LARGE)
+			{
+				if (ptr != lst->addr)
+					continue;
+				TAILQ_REMOVE(&g_pages[i], lst, chain);
+				vfree(lst, lst->page_size);
+				MALLOC_UNLOCK();
+				return;
+			}
+			if ((uint8_t*)ptr < lst->addr
+			 || (uint8_t*)ptr >= lst->addr + g_block_sizes[lst->type] * BLOCKS_COUNT)
 				continue;
-			TAILQ_REMOVE(&g_pages, lst, chain);
-			vfree(lst, lst->size);
+			size_t item = ((uint8_t*)ptr - lst->addr) / g_block_sizes[lst->type];
+			if (lst->addr + g_block_sizes[lst->type] * item != (uint8_t*)ptr)
+				continue;
+			size_t mask = (1 << (item % BLOCK_BITS));
+			size_t *block = &lst->blocks[item / BLOCK_BITS];
+			if (!(*block & mask))
+				panic("double free %p\n", ptr);
+			*block &= ~mask;
+			check_free_pages(lst->type);
 			MALLOC_UNLOCK();
 			return;
 		}
-		if ((uint8_t*)ptr < lst->addr
-		 || (uint8_t*)ptr >= lst->addr + g_block_sizes[lst->type] * BLOCKS_COUNT)
-			continue;
-		size_t item = ((uint8_t*)ptr - lst->addr) / g_block_sizes[lst->type];
-		if (lst->addr + g_block_sizes[lst->type] * item != (uint8_t*)ptr)
-			continue;
-		uint32_t mask = (1 << (item % 32));
-		uint32_t *block = &lst->blocks[item / 32];
-		if (!(*block & mask))
-			panic("double free %p\n", ptr);
-		*block &= ~mask;
-		check_free_pages(lst->type);
-		MALLOC_UNLOCK();
-		return;
 	}
 	panic("free unknown addr: %p\n", ptr);
 	MALLOC_UNLOCK();
@@ -307,22 +313,25 @@ void *realloc(void *ptr, size_t size, uint32_t flags)
 	}
 	MALLOC_LOCK();
 	struct page *lst;
-	TAILQ_FOREACH(lst, &g_pages, chain)
+	for (size_t i = 0; i < sizeof(g_pages) / sizeof(*g_pages); ++i)
 	{
-		if (lst->type == BLOCK_LARGE)
+		TAILQ_FOREACH(lst, &g_pages[i], chain)
 		{
-			if ((uint8_t*)ptr != lst->addr)
+			if (lst->type == BLOCK_LARGE)
+			{
+				if ((uint8_t*)ptr != lst->addr)
+					continue;
+				return realloc_large(lst, ptr, size, flags);
+			}
+			if ((uint8_t*)ptr < lst->addr
+			 || (uint8_t*)ptr >= lst->addr + g_block_sizes[lst->type] * BLOCKS_COUNT)
 				continue;
-			return realloc_large(lst, ptr, size, flags);
+			size_t item = ((uint8_t*)ptr - lst->addr) / g_block_sizes[lst->type];
+			if (lst->addr + g_block_sizes[lst->type] * item == ptr)
+				return realloc_blocky(lst, ptr, size, flags);
+			MALLOC_UNLOCK();
+			return NULL;
 		}
-		if ((uint8_t*)ptr < lst->addr
-		 || (uint8_t*)ptr >= lst->addr + g_block_sizes[lst->type] * BLOCKS_COUNT)
-			continue;
-		uint32_t item = ((uint8_t*)ptr - lst->addr) / g_block_sizes[lst->type];
-		if (lst->addr + g_block_sizes[lst->type] * item == ptr)
-			return realloc_blocky(lst, ptr, size, flags);
-		MALLOC_UNLOCK();
-		return NULL;
 	}
 	MALLOC_UNLOCK();
 	return NULL;
@@ -347,14 +356,14 @@ static void print_page(struct page *page, size_t *total)
 
 	if (page->type == BLOCK_LARGE)
 	{
-		*total += page->size - sizeof(struct page);
-		print_block((size_t)page->addr, (size_t)(page->addr + page->size), page->size);
+		*total += page->data_size;
+		print_block((size_t)page->addr, (size_t)(page->addr + page->data_size), page->data_size);
 		return;
 	}
 	start = NULL;
 	for (i = 0; i < BLOCKS_COUNT; ++i)
 	{
-		uint32_t set = page->blocks[i / 32] & (1 << (i % 32));
+		size_t set = page->blocks[i / BLOCK_BITS] & (1 << (i % BLOCK_BITS));
 		if (set && !start)
 			start = page->addr + i * g_block_sizes[page->type];
 		else if (!set && start)
@@ -372,12 +381,15 @@ static struct page *try_push(size_t min)
 
 	lowest = NULL;
 	lowest_val = -1;
-	TAILQ_FOREACH(lst, &g_pages, chain)
+	for (size_t i = 0; i < sizeof(g_pages) / sizeof(*g_pages); ++i)
 	{
-		if ((lowest_val == 0 || (size_t)lst < lowest_val) && (size_t)lst > min)
+		TAILQ_FOREACH(lst, &g_pages[i], chain)
 		{
-			lowest = lst;
-			lowest_val = (size_t)lowest;
+			if ((lowest_val == 0 || (size_t)lst < lowest_val) && (size_t)lst > min)
+			{
+				lowest = lst;
+				lowest_val = (size_t)lowest;
+			}
 		}
 	}
 	return lowest;
@@ -385,7 +397,8 @@ static struct page *try_push(size_t min)
 
 void alloc_init(void)
 {
-	TAILQ_INIT(&g_pages);
+	for (size_t i = 0; i < sizeof(g_pages) / sizeof(*g_pages); ++i)
+		TAILQ_INIT(&g_pages[i]);
 }
 
 void show_alloc_mem(void)
@@ -400,7 +413,7 @@ void show_alloc_mem(void)
 	{
 		if (!(tmp = try_push((size_t)tmp)))
 			break;
-		printf("%s : %p (0x%lx)\n", g_block_str[tmp->type], tmp, tmp->size);
+		printf("%s : %p (0x%lx)\n", g_block_str[tmp->type], tmp, tmp->page_size);
 		print_page(tmp, &total);
 	}
 	printf("total: %lu bytes\n", total);

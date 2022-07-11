@@ -25,4 +25,7 @@ struct file_op
 	int (*ioctl)(struct file *file, unsigned long request, intptr_t data);
 };
 
+void file_incref(struct file *file);
+void file_decref(struct file *file);
+
 #endif

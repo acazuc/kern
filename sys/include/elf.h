@@ -160,7 +160,7 @@ typedef struct
 } Elf32_Rela;
 
 #define ELF32_R_SYM(i) ((i) >> 8)
-#define ELF32_R_TYPE(i) ((unsigned char)(i))
+#define ELF32_R_TYPE(i) ((i) & 0xFF)
 #define ELF32_R_INFO(s, t) (((s) << 8) + (unsigned char)(t))
 
 #define R_386_NONE 0
@@ -194,42 +194,51 @@ typedef struct
 #define PT_NOTE 4
 #define PT_SHLIB 5
 #define PT_PHDR 6
-#define PT_LOPROC 0x70000000
-#define PT_HIPROC 0x7fffffff
+#define PT_GNU_EH_FRAME 0x6474E550
+#define PT_GNU_STACK    0x6474E551
+#define PT_GNU_RELRO    0x6474E552
+#define PT_LOPROC       0x70000000
+#define PT_HIPROC       0x7fffffff
 
-typedef struct {
+typedef struct
+{
 	Elf32_Sword d_tag;
-	union {
+	union
+	{
 		Elf32_Word d_val;
 		Elf32_Addr d_ptr;
 	} d_un;
 } Elf32_Dyn;
 
-#define DT_NULL 0
-#define DT_NEEDED 1
-#define DT_PLTRELSZ 2
-#define DT_PLTGOT 3
-#define DT_HASH 4
-#define DT_STRTAB 5
-#define DT_SYMTAB 6
-#define DT_RELA 7
-#define DT_RELASZ 8
-#define DT_RELAENT 9
-#define DT_STRSZ 10
-#define DT_SYMENT 11
-#define DT_INIT 12
-#define DT_FINI 13
-#define DT_SONAME 14
-#define DT_RPATH 15
-#define DT_SYMBOLIC 16
-#define DT_REL 17
-#define DT_RELSZ 18
-#define DT_RELENT 19
-#define DT_PLTREL 20
-#define DT_DEBUG 21
-#define DT_TEXTREL 22
-#define DT_JMPREL 23
-#define DT_LOPROC 0x70000000
-#define DT_HIPROC 0x7fffffff
+#define DT_NULL     0x0
+#define DT_NEEDED   0x1
+#define DT_PLTRELSZ 0x2
+#define DT_PLTGOT   0x3
+#define DT_HASH     0x4
+#define DT_STRTAB   0x5
+#define DT_SYMTAB   0x6
+#define DT_RELA     0x7
+#define DT_RELASZ   0x8
+#define DT_RELAENT  0x9
+#define DT_STRSZ    0xA
+#define DT_SYMENT   0xB
+#define DT_INIT     0xC
+#define DT_FINI     0xD
+#define DT_SONAME   0xE
+#define DT_RPATH    0xF
+#define DT_SYMBOLIC 0x10
+#define DT_REL      0x11
+#define DT_RELSZ    0x12
+#define DT_RELENT   0x13
+#define DT_PLTREL   0x14
+#define DT_DEBUG    0x15
+#define DT_TEXTREL  0x16
+#define DT_JMPREL   0x17
+#define DT_FLAGS    0x1E
+#define DT_GNU_HASH 0x6FFFFEF5
+#define DT_RELCOUNT 0x6FFFFFFA
+#define DT_FLAGS_1  0x6FFFFFFB
+#define DT_LOPROC   0x70000000
+#define DT_HIPROC   0x7fffffff
 
 #endif

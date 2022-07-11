@@ -32,4 +32,4 @@ $(OBJ_PATH)/%.S.o: $(SRC_PATH)/%.S
 $(BIN): $(OBJ)
 	@mkdir -p $(dir $@)
 	@echo "LD $@"
-	@$(LD) -o $@ $(LDFLAGS) $< -lgcc
+	@$(LD) -o $@ $(LDFLAGS) $(OBJ) -lgcc

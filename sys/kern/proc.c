@@ -14,7 +14,7 @@ struct proc *curproc;
 static pid_t g_pid;
 static pid_t g_tid;
 
-static struct thread *proc_create(const char *name, void *entry)
+static struct thread *proc_create(const char *name, struct vmm_ctx *vmm_ctx, void *entry)
 {
 	struct proc *proc = malloc(sizeof(*proc), M_ZERO);
 	assert(proc, "can't alloc proc\n");
@@ -24,10 +24,12 @@ static struct thread *proc_create(const char *name, void *entry)
 	proc->name = strdup(name);
 	assert(proc->name, "can' dup proc name");
 	proc->root = g_vfs_root;
+	fs_node_incref(proc->root);
 	proc->cwd = proc->root;
+	fs_node_incref(proc->root);
 	proc->files = NULL;
 	proc->files_nb = 0;
-	proc->vmm_ctx = create_vmm_ctx();
+	proc->vmm_ctx = vmm_ctx ? vmm_ctx : vmm_ctx_create();
 	assert(proc->vmm_ctx, "vmm ctx allocation failed\n");
 	TAILQ_INIT(&proc->threads);
 	TAILQ_INSERT_HEAD(&proc->threads, thread, thread_chain);
@@ -55,7 +57,7 @@ static struct thread *proc_create(const char *name, void *entry)
 
 struct thread *uproc_create(const char *name, void *entry)
 {
-	struct thread *thread = proc_create(name, entry);
+	struct thread *thread = proc_create(name, NULL, entry);
 	if (!thread)
 		return NULL;
 	init_trapframe_user(thread);
@@ -64,10 +66,23 @@ struct thread *uproc_create(const char *name, void *entry)
 
 struct thread *kproc_create(const char *name, void *entry)
 {
-	struct thread *thread = proc_create(name, entry);
+	struct thread *thread = proc_create(name, NULL, entry);
 	if (!thread)
 		return NULL;
 	init_trapframe_kern(thread);
+	return thread;
+}
+
+struct thread *uproc_create_elf(const char *name, struct file *file)
+{
+	struct vmm_ctx *vmm_ctx = vmm_ctx_create();
+	assert(vmm_ctx, "can't create vmm ctx\n");
+	void *entry;
+	assert(!elf_createctx(file, vmm_ctx, &entry), "can't parse elf\n");
+	struct thread *thread = proc_create(name, vmm_ctx, entry);
+	if (!thread)
+		return NULL; /* XXX free vmm ctx */
+	init_trapframe_user(thread);
 	return thread;
 }
 
@@ -126,4 +141,27 @@ struct thread *proc_fork(struct thread *thread)
 	if (newt->state == THREAD_PAUSED)
 		sched_run(newt);
 	return newt;
+}
+
+void proc_delete(struct proc *proc)
+{
+	struct thread *thread, *next;
+	TAILQ_FOREACH_SAFE(thread, &proc->threads, thread_chain, next)
+	{
+		vfree(thread->int_stack, thread->int_stack_size);
+		free(thread);
+	}
+	vmm_ctx_delete(proc->vmm_ctx);
+	free(proc->name);
+	for (size_t i = 0; i < proc->files_nb; ++i)
+	{
+		struct file *file = proc->files[i];
+		if (!file)
+			continue;
+		file_decref(file);
+	}
+	free(proc->files);
+	fs_node_decref(proc->root);
+	fs_node_decref(proc->cwd);
+	free(proc);
 }

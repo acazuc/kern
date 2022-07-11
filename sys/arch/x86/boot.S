@@ -52,7 +52,6 @@ _start:
 
 	#setup dir page
 	movl $(kern_tbl + 3), dir_page + 0x000 # identity
-	movl $(user_tbl + 7), dir_page + 0x004 # userland
 	movl $(kern_tbl + 3), dir_page + 0xC00 # high mem
 	movl $(dir_page + 3), dir_page + 0xFFC # recursive
 

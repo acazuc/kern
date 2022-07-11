@@ -15,7 +15,7 @@ struct proc
 	char *name;
 	void *entrypoint;
 	struct file **files;
-	uint32_t files_nb;
+	size_t files_nb;
 	struct fs_node *root;
 	struct fs_node *cwd;
 	mode_t umask;
@@ -60,9 +60,15 @@ struct thread *uproc_create(const char *name, void *entry);
 struct thread *kproc_create(const char *name, void *entry);
 struct thread *proc_fork(struct thread *thread);
 
-struct thread *elf_createproc(struct file *file);
+struct thread *uproc_create_elf(const char *name, struct file *file);
+
+int elf_createctx(struct file *file, struct vmm_ctx *vmm_ctx, void **entry);
+
+void proc_delete(struct proc *proc);
 
 extern struct proc *curproc;
 extern struct thread *curthread;
+extern struct proc *idle_proc;
+extern struct thread *idle_thread;
 
 #endif

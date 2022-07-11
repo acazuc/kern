@@ -2,6 +2,8 @@ MKDIR=$(PWD)/mk
 
 include $(MKDIR)/env.mk
 
+INCLUDE_SYSDIR = sys/include
+
 BIN_NAME = os.bin
 
 ISO_NAME = os.iso
@@ -14,12 +16,7 @@ BIN = bin
 
 LIB = lib
 
-INCLUDE_DIR = sys/include
-
-SRC_NAME = kernel.c \
-           user.c \
-           user.s \
-           arch/x86/boot.S \
+SRC_NAME = arch/x86/boot.S \
            arch/x86/boot.c \
            arch/x86/gdt.c \
            arch/x86/gdt.s \
@@ -52,6 +49,7 @@ SRC_NAME = kernel.c \
            kern/sched.c \
            kern/proc.c \
            kern/elf.c \
+           kern/file.c \
 
 SRC_PATH = sys
 
@@ -68,10 +66,10 @@ OBJ = $(addprefix $(OBJ_PATH)/, $(OBJ_NAME))
 all: $(BIN_NAME)
 
 $(BIN):
-	@make MKDIR=$(MKDIR) -C $(BIN)
+	@make MKDIR=$(MKDIR) INCLUDE_SYSDIR=$(PWD)/$(INCLUDE_SYSDIR) -C $(BIN)
 
 $(LIB):
-	@make MKDIR=$(MKDIR) -C $(LIB)
+	@make MKDIR=$(MKDIR) INCLUDE_SYSDIR=$(PWD)/$(INCLUDE_SYSDIR) -C $(LIB)
 
 $(LDFILE):
 

@@ -29,9 +29,10 @@ static int verify_userstr(const char *str)
 
 static int sys_exit(int code)
 {
-	/* XXX */
-	(void)code;
-	return -ENOSYS;
+	curproc = idle_proc;
+	curthread = idle_thread;
+	proc_delete(curproc);
+	return 0;
 }
 
 static int sys_fork()
@@ -93,8 +94,7 @@ static int sys_open(const char *path, int flags, mode_t mode)
 		ret = node->fop->open(file, node);
 		if (ret)
 		{
-			fs_node_decref(node);
-			free(file);
+			file_decref(file);
 			return -ret;
 		}
 	}
@@ -106,7 +106,7 @@ static int sys_open(const char *path, int flags, mode_t mode)
 	{
 		if (file->op && file->op->close)
 			file->op->close(file);
-		free(file); /* XXX: deref */
+		file_decref(file);
 		return -ENOMEM;
 	}
 	curproc->files = fd;
@@ -124,8 +124,8 @@ static int sys_close(int fd)
 		return -EBADF;
 	if (file->op && file->op->close)
 		file->op->close(file);
-	free(file); /* XXX: decref */
 	curproc->files[fd] = NULL;
+	file_decref(file);
 	return -ENOSYS;
 }
 
@@ -434,7 +434,53 @@ static int sys_getdents(int fd, struct sys_dirent *dirp, size_t count)
 	if (getdents_ctx.res)
 		return -getdents_ctx.res;
 	return getdents_ctx.off;
-};
+}
+
+static int sys_execve(const char *pathname, const char *const *argv, const char *const *envp)
+{
+	if (!verify_userstr(pathname))
+		return -EFAULT;
+	/* XXX: argv, envpn */
+	struct fs_node *node;
+	int ret = vfs_getnode(NULL, pathname, &node);
+	if (ret)
+		return -ret;
+	struct file file;
+	file.refcount = 1;
+	if (node->fop && node->fop->open)
+	{
+		ret = node->fop->open(&file, node);
+		if (ret)
+		{
+			file_decref(&file);
+			return -ret;
+		}
+	}
+	file.op = node->fop;
+	file.node = node;
+	file.off = 0;
+	/* XXX better way to do this */
+	struct vmm_ctx *vmm_ctx = vmm_ctx_create();
+	if (!vmm_ctx)
+	{
+		file_decref(&file);
+		return -ENOMEM;
+	}
+	void *entry;
+	ret = elf_createctx(&file, vmm_ctx, &entry);
+	if (ret)
+	{
+		file_decref(&file);
+		return -ret;
+	}
+	curproc->entrypoint = entry;
+	vmm_ctx_delete(curproc->vmm_ctx);
+	curproc->vmm_ctx = vmm_ctx;
+	curthread->stack = vmalloc_user(curproc->vmm_ctx, (void*)(0xC0000000 - curthread->stack_size), curthread->stack_size);
+	curthread->trapframe.esp = &curthread->stack[curthread->stack_size];
+	curthread->trapframe.eip = entry;
+	return 0;
+}
 
 static int (*g_syscalls[])() =
 {
@@ -469,6 +515,7 @@ static int (*g_syscalls[])() =
 	[SYS_STAT]      = sys_stat,
 	[SYS_FSTAT]     = sys_fstat,
 	[SYS_GETDENTS]  = sys_getdents,
+	[SYS_EXECVE]    = sys_execve,
 };
 
 void call_sys(const struct int_ctx *ctx)
