@@ -2,4 +2,4 @@ BIN = libc.so
 
 SRC = string.c
 
-include <lib.mk>
+include $(MKDIR)/lib.mk

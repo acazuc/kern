@@ -33,6 +33,13 @@ SECTIONS
 
 	.data BLOCK(4K) : AT(ADDR(.data) - 0xC0000000)
 	{
+		obj/sh(.data)
+		. = ALIGN(4K);
+		obj/cat(.data)
+		. = ALIGN(4K);
+		obj/libc.so(.data)
+		. = ALIGN(4K);
+		obj/ld.so(.data)
 		*(.data)
 	}
 

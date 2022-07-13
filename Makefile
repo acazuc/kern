@@ -76,7 +76,7 @@ $(LDFILE):
 $(OBJ_PATH)/%.c.o: $(SRC_PATH)/%.c
 	@mkdir -p $(dir $@)
 	@echo "CC $<"
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) -fno-pie -fno-pic -c $< -o $@
 
 $(OBJ_PATH)/%.s.o: $(SRC_PATH)/%.s
 	@mkdir -p $(dir $@)
@@ -88,12 +88,15 @@ $(OBJ_PATH)/%.S.o: $(SRC_PATH)/%.S
 	@echo "AS $<"
 	@$(AS) $(ASFLAGS) $< -o $@
 
-$(BIN_NAME): $(OBJ) $(LDFILE) bin lib
+$(BIN_NAME): $(OBJ) $(LDFILE) lib bin
 	@mkdir -p $(dir $@)
 	@ld -melf_i386 -r -b binary -o obj/sh bin/sh/sh
 	@ld -melf_i386 -r -b binary -o obj/cat bin/cat/cat
+	@ld -melf_i386 -r -b binary -o obj/init bin/init/init
+	@ld -melf_i386 -r -b binary -o obj/libc.so lib/libc/libc.so
+	@ld -melf_i386 -r -b binary -o obj/ld.so lib/ld/ld.so
 	@echo "LD $@"
-	@$(LD) $(LDFLAGS) -T $(LDFILE) -o $@ $(OBJ) obj/sh obj/cat -lgcc
+	@$(LD) $(LDFLAGS) -ffreestanding -T $(LDFILE) -o $@ $(OBJ) obj/sh obj/cat obj/init obj/libc.so obj/ld.so -lgcc
 
 $(ISO_NAME): $(BIN_NAME)
 	@mkdir -p $(dir $<)

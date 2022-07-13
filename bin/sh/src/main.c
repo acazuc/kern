@@ -17,6 +17,9 @@
 
 int32_t errno;
 
+size_t strlen(const char *s);
+void *memcpy(void *d, const void *s, size_t n);
+
 int32_t syscall(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, uint32_t arg6);
 
 #define TRANSFORM_ERRNO(ret) \
@@ -116,14 +119,6 @@ static int execve(const char *pathname, char *const argv[], char *const envp[])
 	return ret;
 }
 
-static size_t strlen(const char *s)
-{
-	size_t i = 0;
-	while (s[i])
-		i++;
-	return i;
-}
-
 static int strcmp(const char *s1, const char *s2)
 {
 	size_t i = 0;
@@ -140,13 +135,6 @@ static void *memchr(const void *s, int c, size_t n)
 			return (uint8_t*)s + i;
 	}
 	return NULL;
-}
-
-static void *memcpy(void *d, const void *s, size_t n)
-{
-	for (size_t i = 0; i < n; ++i)
-		((uint8_t*)d)[i] = ((uint8_t*)s)[i];
-	return d;
 }
 
 static int strncmp(const char *s1, const char *s2, size_t n)
@@ -318,6 +306,5 @@ loop: goto loop;
 
 void _start(void)
 {
-	main(0, NULL, NULL);
-	exit(0);
+	exit(main(0, NULL, NULL));
 }

@@ -56,11 +56,10 @@ struct thread
 	TAILQ_ENTRY(thread) queue_chain;
 };
 
-struct thread *uproc_create(const char *name, void *entry);
-struct thread *kproc_create(const char *name, void *entry);
+struct thread *uproc_create(const char *name, void *entry, const char * const *av, const char * const *ev);
+struct thread *kproc_create(const char *name, void *entry, const char * const *av, const char * const *ev);
 struct thread *proc_fork(struct thread *thread);
-
-struct thread *uproc_create_elf(const char *name, struct file *file);
+struct thread *uproc_create_elf(const char *name, struct file *file, const char * const *av, const char * const *ev);
 
 int elf_createctx(struct file *file, struct vmm_ctx *vmm_ctx, void **entry);
 

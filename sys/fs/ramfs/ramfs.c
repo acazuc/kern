@@ -12,10 +12,19 @@
 static int dir_lookup(struct fs_node *node, const char *name, uint32_t namelen, struct fs_node **child);
 static int dir_readdir(struct fs_node *node, struct fs_readdir_ctx *ctx);
 
-extern uint8_t _binary_bin_sh_sh_start;
-extern uint8_t _binary_bin_sh_sh_end;
-extern uint8_t _binary_bin_cat_cat_start;
-extern uint8_t _binary_bin_cat_cat_end;
+#define BIN_DEF(bin) \
+extern uint8_t _binary_bin_##bin##_##bin##_start; \
+extern uint8_t _binary_bin_##bin##_##bin##_end;
+
+#define LIB_DEF(lib) \
+extern uint8_t _binary_lib_##lib##_##lib##_so_start; \
+extern uint8_t _binary_lib_##lib##_##lib##_so_end;
+
+BIN_DEF(sh);
+BIN_DEF(cat);
+BIN_DEF(init);
+LIB_DEF(libc);
+LIB_DEF(ld);
 
 static const struct fs_type g_type =
 {
@@ -194,6 +203,15 @@ struct fs_sb *ramfs_init(void)
 	struct ramfs_reg *cat = mkreg(bin, "cat");
 	cat->data = &_binary_bin_cat_cat_start;
 	cat->size = &_binary_bin_cat_cat_end - &_binary_bin_cat_cat_start;
+	struct ramfs_reg *init = mkreg(bin, "init");
+	init->data = &_binary_bin_init_init_start;
+	init->size = &_binary_bin_init_init_end - &_binary_bin_init_init_start;
+	struct ramfs_reg *libc = mkreg(lib, "libc.so");
+	libc->data = &_binary_lib_libc_libc_so_start;
+	libc->size = &_binary_lib_libc_libc_so_end - &_binary_lib_libc_libc_so_start;
+	struct ramfs_reg *ld = mkreg(lib, "ld.so");
+	ld->data = &_binary_lib_ld_ld_so_start;
+	ld->size = &_binary_lib_ld_ld_so_end - &_binary_lib_ld_ld_so_start;
 	g_sb.root = &root->node.node;
 	return &g_sb;
 }

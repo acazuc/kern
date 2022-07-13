@@ -6,3 +6,4 @@ isodir
 *.swp
 *.swo
 disk.qcow2
+*.so

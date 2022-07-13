@@ -606,6 +606,11 @@ static void vfree_zone(struct vmm_ctx *ctx, void *ptr, size_t size)
 
 void *vmalloc(size_t size)
 {
+	/*
+	 * NB: dst MUST be NULL
+	 * if not, allocation could occur during malloc call(), doing recursive
+	 * allocation, stucking the system
+	 */
 	return vmalloc_zone(NULL, NULL, size, 0);
 }
 

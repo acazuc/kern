@@ -161,7 +161,7 @@ typedef struct
 
 #define ELF32_R_SYM(i) ((i) >> 8)
 #define ELF32_R_TYPE(i) ((i) & 0xFF)
-#define ELF32_R_INFO(s, t) (((s) << 8) + (unsigned char)(t))
+#define ELF32_R_INFO(s, t) (((s) << 8) + ((t) & 0xFF))
 
 #define R_386_NONE 0
 #define R_386_32 1

@@ -1,8 +1,8 @@
-BIN = sh
+BIN = init
 
 SRC = main.c \
       main.s \
 
-LIB = libc \
+LIB = 
 
 include $(MKDIR)/bin.mk

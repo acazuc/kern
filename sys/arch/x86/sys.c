@@ -476,7 +476,7 @@ static int sys_execve(const char *pathname, const char *const *argv, const char 
 	curproc->entrypoint = entry;
 	vmm_ctx_delete(curproc->vmm_ctx);
 	curproc->vmm_ctx = vmm_ctx;
-	curthread->stack = vmalloc_user(curproc->vmm_ctx, (void*)(0xC0000000 - curthread->stack_size), curthread->stack_size);
+	curthread->stack = vmalloc_user(curproc->vmm_ctx, (void*)(0xC0000000 - curthread->stack_size), curthread->stack_size); /* XXX ASLR */
 	curthread->trapframe.esp = &curthread->stack[curthread->stack_size];
 	curthread->trapframe.eip = entry;
 	return 0;

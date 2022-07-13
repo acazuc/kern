@@ -337,10 +337,14 @@ void kernel_main(struct multiboot_info *mb_info)
 	ps2_init();
 	ide_init();
 	sched_init();
-	idle_thread = kproc_create("idle", idle_loop);
-	idle_thread->pri = 255;
-	idle_proc = idle_thread->proc;
-	sched_add(idle_thread);
+	{
+		const char *argv[] = {"idle", NULL};
+		const char *envp[] = {NULL};
+		idle_thread = kproc_create("idle", idle_loop, argv, envp);
+		idle_thread->pri = 255;
+		idle_proc = idle_thread->proc;
+		sched_add(idle_thread);
+	}
 	idle_thread->state = THREAD_RUNNING;
 	curthread = idle_thread;
 	curproc = curthread->proc;
@@ -348,12 +352,17 @@ void kernel_main(struct multiboot_info *mb_info)
 	{
 		struct file *file;
 		struct fs_node *elf;
-		assert(!vfs_getnode(NULL, "/bin/sh", &elf), "can't open /bin/sh");
+		assert(!vfs_getnode(NULL, "/bin/init", &elf), "can't open /bin/init");
 		file = malloc(sizeof(*file), 0);
 		file->op = elf->fop;
 		file->node = elf;
 		file->off = 0;
-		thread = uproc_create_elf("sh", file);
+		file->refcount = 1;
+		const char *argv[] = {"init", NULL};
+		const char *envp[] = {NULL};
+		thread = uproc_create_elf("init", file, argv, envp);
+		sched_add(thread);
+		file_decref(file);
 	}
 	/* added after init to avoid buggy scheduling on page fault interrupt */
 	sched_run(thread);

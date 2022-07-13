@@ -29,8 +29,7 @@ static struct thread *proc_create(const char *name, struct vmm_ctx *vmm_ctx, voi
 	fs_node_incref(proc->root);
 	proc->files = NULL;
 	proc->files_nb = 0;
-	proc->vmm_ctx = vmm_ctx ? vmm_ctx : vmm_ctx_create();
-	assert(proc->vmm_ctx, "vmm ctx allocation failed\n");
+	proc->vmm_ctx = vmm_ctx;
 	TAILQ_INIT(&proc->threads);
 	TAILQ_INSERT_HEAD(&proc->threads, thread, thread_chain);
 	proc->entrypoint = entry;
@@ -46,7 +45,7 @@ static struct thread *proc_create(const char *name, struct vmm_ctx *vmm_ctx, voi
 	proc->sgid = 0;
 	thread->state = THREAD_PAUSED;
 	thread->stack_size = 1024 * 16;
-	thread->stack = vmalloc_user(proc->vmm_ctx, (void*)(0xC0000000 - thread->stack_size), thread->stack_size);
+	thread->stack = vmalloc_user(proc->vmm_ctx, (void*)(0xC0000000 - thread->stack_size), thread->stack_size); /* XXX aslr */
 	assert(thread->stack, "can't allocate thread stack\n");
 	thread->int_stack_size = 1024 * 4;
 	thread->int_stack = vmalloc(thread->int_stack_size);
@@ -55,25 +54,49 @@ static struct thread *proc_create(const char *name, struct vmm_ctx *vmm_ctx, voi
 	return thread;
 }
 
-struct thread *uproc_create(const char *name, void *entry)
+static void insert_argv_envp(struct thread *thread, const char * const * argv, const char * const *envp)
 {
-	struct thread *thread = proc_create(name, NULL, entry);
+	for (size_t i = 0; argv[i]; ++i)
+	{
+		/* XXX copy argv[i] */
+	}
+	for (size_t i = 0; envp[i]; ++i)
+	{
+		/* XXX copy envp[i] */
+	}
+}
+
+struct thread *uproc_create(const char *name, void *entry, const char * const *argv, const char * const *envp)
+{
+	struct vmm_ctx *vmm_ctx = vmm_ctx_create();
+	assert(vmm_ctx, "can't create vmm ctx\n");
+	struct thread *thread = proc_create(name, vmm_ctx, entry);
 	if (!thread)
+	{
+		vmm_ctx_delete(vmm_ctx);
 		return NULL;
+	}
 	init_trapframe_user(thread);
+	insert_argv_envp(thread, argv, envp);
 	return thread;
 }
 
-struct thread *kproc_create(const char *name, void *entry)
+struct thread *kproc_create(const char *name, void *entry, const char * const *argv, const char * const *envp)
 {
-	struct thread *thread = proc_create(name, NULL, entry);
+	struct vmm_ctx *vmm_ctx = vmm_ctx_create();
+	assert(vmm_ctx, "can't create vmm ctx\n");
+	struct thread *thread = proc_create(name, vmm_ctx, entry);
 	if (!thread)
+	{
+		vmm_ctx_delete(vmm_ctx);
 		return NULL;
+	}
 	init_trapframe_kern(thread);
+	insert_argv_envp(thread, argv, envp);
 	return thread;
 }
 
-struct thread *uproc_create_elf(const char *name, struct file *file)
+struct thread *uproc_create_elf(const char *name, struct file *file, const char * const *argv, const char * const *envp)
 {
 	struct vmm_ctx *vmm_ctx = vmm_ctx_create();
 	assert(vmm_ctx, "can't create vmm ctx\n");
@@ -81,8 +104,12 @@ struct thread *uproc_create_elf(const char *name, struct file *file)
 	assert(!elf_createctx(file, vmm_ctx, &entry), "can't parse elf\n");
 	struct thread *thread = proc_create(name, vmm_ctx, entry);
 	if (!thread)
-		return NULL; /* XXX free vmm ctx */
+	{
+		vmm_ctx_delete(vmm_ctx);
+		return NULL;
+	}
 	init_trapframe_user(thread);
+	insert_argv_envp(thread, argv, envp);
 	return thread;
 }
 

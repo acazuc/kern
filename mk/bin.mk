@@ -12,12 +12,22 @@ OBJ_PATH = obj
 
 OBJ = $(addprefix $(OBJ_PATH)/, $(OBJ_NAME))
 
+LIBS_DIR = $(addprefix -L ../../lib/, $(LIB))
+
+LIBS_LINK1 = $(addprefix -l:, $(LIB))
+
+LIBS_LINK = $(addsuffix .so, $(LIBS_LINK1))
+
+LIBS_INC1 = $(addsuffix /include, $(LIB))
+
+LIBS_INC = $(addprefix -I ../../, $(LIBS_INC1))
+
 all: $(BIN)
 
 $(OBJ_PATH)/%.c.o: $(SRC_PATH)/%.c
 	@mkdir -p $(dir $@)
 	@echo "CC $<"
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) -c $< -o $@ $(LIBS_INC)
 
 $(OBJ_PATH)/%.s.o: $(SRC_PATH)/%.s
 	@mkdir -p $(dir $@)
@@ -32,4 +42,4 @@ $(OBJ_PATH)/%.S.o: $(SRC_PATH)/%.S
 $(BIN): $(OBJ)
 	@mkdir -p $(dir $@)
 	@echo "LD $@"
-	@$(LD) -o $@ $(LDFLAGS) $(OBJ) -lgcc
+	@$(LD) -o $@ $(LDFLAGS) $(OBJ) -lgcc $(LIBS_DIR) $(LIBS_LINK) -Wl,-dynamic-linker,/lib/ld.so

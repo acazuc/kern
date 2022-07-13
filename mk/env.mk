@@ -23,13 +23,11 @@ CFLAGS = -std=c99 \
          -fno-stack-protector \
          -fcf-protection=none \
          -g \
-         -fno-pie \
-         -fno-pic \
          -nostdinc \
          -isystem $(INCLUDE_SYSDIR) \
          -iquote $(SRC_PATH)
 
-LDFLAGS = -ffreestanding \
-          -nostdlib \
+LDFLAGS = -nostdlib \
           -nodefaultlibs \
-          -m32
+          -m32 \
+          -nostartfiles

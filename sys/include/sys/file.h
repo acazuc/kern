@@ -23,6 +23,7 @@ struct file_op
 	int (*write)(struct file *file, const void *data, size_t count);
 	int (*read)(struct file *file, void *data, size_t count);
 	int (*ioctl)(struct file *file, unsigned long request, intptr_t data);
+	int (*mmap)(struct file *file, struct vmm_ctx *vmm_ctx, void *dst, off_t off, size_t len);
 };
 
 void file_incref(struct file *file);
