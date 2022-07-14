@@ -56,14 +56,59 @@ static struct thread *proc_create(const char *name, struct vmm_ctx *vmm_ctx, voi
 
 static void insert_argv_envp(struct thread *thread, const char * const * argv, const char * const *envp)
 {
+	/* XXX: check bounds of stack for cpy */
+	/* XXX: don't map all the stack ? */
+	char *stackorg = vmap_user(thread->proc->vmm_ctx, thread->stack, thread->stack_size);
+	assert(stackorg, "failed to map stackp\n");
+	char *stackp = stackorg + thread->stack_size;
+	size_t argc = 0;
+	size_t envc = 0;
 	for (size_t i = 0; argv[i]; ++i)
 	{
-		/* XXX copy argv[i] */
+		size_t len = strlen(argv[i]);
+		stackp -= len + 1;
+		memcpy(stackp, argv[i], len + 1);
+		argc++;
 	}
 	for (size_t i = 0; envp[i]; ++i)
 	{
-		/* XXX copy envp[i] */
+		size_t len = strlen(envp[i]);
+		stackp -= len + 1;
+		memcpy(stackp, envp[i], len + 1);
+		envc++;
 	}
+	char *org = (char*)thread->stack + thread->stack_size;
+	char *stack_argv;
+	char *stack_envp;
+	stackp -= sizeof(char*);
+	*(char**)stackp = NULL;
+	for (size_t i = argc; i > 0; --i)
+	{
+		org -= strlen(argv[i - 1]) + 1;
+		stackp -= sizeof(char*);
+		*(char**)stackp = org;
+	}
+	stack_argv = (char*)thread->stack + (stackp - stackorg);
+	stackp -= sizeof(char*);
+	*(char**)stackp = NULL;
+	for (size_t i = envc; i > 0; --i)
+	{
+		org -= strlen(envp[i - 1]) + 1;
+		stackp -= sizeof(char*);
+		*(char**)stackp = org;
+	}
+	stack_envp = (char*)thread->stack + (stackp - stackorg);
+	/* XXX parameters to _start are platform dependant */
+	stackp -= sizeof(char*);
+	*(char**)stackp = stack_envp;
+	stackp -= sizeof(char*);
+	*(char**)stackp = stack_argv;
+	stackp -= sizeof(char*);
+	*(int*)stackp = argc;
+	stackp -= sizeof(char*); /* stack return value */
+	*(int*)stackp = 0;
+	thread->trapframe.esp = (uint32_t)(thread->stack + (stackp - stackorg));
+	vunmap(stackorg, thread->stack_size);
 }
 
 struct thread *uproc_create(const char *name, void *entry, const char * const *argv, const char * const *envp)

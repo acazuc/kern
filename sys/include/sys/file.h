@@ -24,6 +24,7 @@ struct file_op
 	int (*read)(struct file *file, void *data, size_t count);
 	int (*ioctl)(struct file *file, unsigned long request, intptr_t data);
 	int (*mmap)(struct file *file, struct vmm_ctx *vmm_ctx, void *dst, off_t off, size_t len);
+	off_t (*seek)(struct file *file, off_t off, int whence);
 };
 
 void file_incref(struct file *file);

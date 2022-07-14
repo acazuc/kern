@@ -1,6 +1,7 @@
 #include "dev/pic/pic.h"
 #include "dev/pit/pit.h"
-#include "dev/vga/vga.h"
+#include "dev/vga/txt.h"
+#include "dev/vga/rgb.h"
 #include "dev/com/com.h"
 #include "dev/ps2/ps2.h"
 #include "dev/ide/ide.h"
@@ -288,7 +289,7 @@ static void tty_init(void)
 	{
 		char name[16];
 		snprintf(name, sizeof(name), "tty%" PRIu32, i);
-		int res = tty_create_vga(name, i, &ttys[i]);
+		int res = vga_txt_mktty(name, i, &ttys[i]); /* XXX: use rgb tty if any */
 		if (res)
 			printf("can't create %s: %s", name, strerror(res));
 	}
@@ -308,15 +309,29 @@ void kernel_main(struct multiboot_info *mb_info)
 {
 	cli();
 	alloc_init();
-	vga_init();
-	printf("\n");
-	printf("x86 boot @ %p\n", kernel_main);
-	print_multiboot(mb_info);
-	print_cpuid();
 	uint32_t mem_size = mb_get_memory_map_size(mb_info);
 	assert(mem_size, "can't get memory map\n");
 	assert(mem_size >= 0x1000000, "can't get 16MB of memory\n");
 	paging_init(0x1000000, mem_size - 0x1000000);
+	if (mb_info->flags & MULTIBOOT_INFO_FRAMEBUFFER_INFO)
+	{
+		switch (mb_info->framebuffer_type)
+		{
+			case MULTIBOOT_FRAMEBUFFER_TYPE_EGA_TEXT:
+				vga_txt_init(mb_info->framebuffer_addr, mb_info->framebuffer_width, mb_info->framebuffer_height, mb_info->framebuffer_pitch);
+				break;
+			case MULTIBOOT_FRAMEBUFFER_TYPE_RGB:
+				vga_rgb_init(mb_info->framebuffer_addr, mb_info->framebuffer_width, mb_info->framebuffer_height, mb_info->framebuffer_pitch, mb_info->framebuffer_bpp); /* XXX: use mask & fields from mb_info ? */
+				break;
+			default:
+				panic("can't init vga\n");
+				return;
+		}
+	}
+	else
+	{
+		vga_txt_init(0xB8000, 80, 25, 80 * 2);
+	}
 	gdt_init();
 	idt_init();
 	pic_init(0x20, 0x28);
@@ -345,6 +360,17 @@ void kernel_main(struct multiboot_info *mb_info)
 		idle_proc = idle_thread->proc;
 		sched_add(idle_thread);
 	}
+	{
+		uint32_t size = mb_info->framebuffer_bpp / 8;
+		size *= mb_info->framebuffer_pitch;
+		size *= mb_info->framebuffer_height;
+		size_t map_size = size;
+		map_size += PAGE_SIZE - 1;
+		map_size -= map_size % PAGE_SIZE;
+		uint8_t *addr = vmap(mb_info->framebuffer_addr, map_size);
+		for (size_t i = 0; i < size; ++i)
+			addr[i] = i * 0XF;
+	}
 	idle_thread->state = THREAD_RUNNING;
 	curthread = idle_thread;
 	curproc = curthread->proc;
@@ -358,7 +384,7 @@ void kernel_main(struct multiboot_info *mb_info)
 		file->node = elf;
 		file->off = 0;
 		file->refcount = 1;
-		const char *argv[] = {"init", NULL};
+		const char *argv[] = {"/bin/init", NULL};
 		const char *envp[] = {NULL};
 		thread = uproc_create_elf("init", file, argv, envp);
 		sched_add(thread);

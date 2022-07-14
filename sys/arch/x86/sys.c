@@ -126,7 +126,7 @@ static int sys_close(int fd)
 		file->op->close(file);
 	curproc->files[fd] = NULL;
 	file_decref(file);
-	return -ENOSYS;
+	return 0;
 }
 
 static int sys_time(time_t *tloc)
@@ -482,6 +482,38 @@ static int sys_execve(const char *pathname, const char *const *argv, const char 
 	return 0;
 }
 
+static int sys_lseek(int fd, off_t off, int whence)
+{
+	if (fd < 0 || (unsigned)fd >= curproc->files_nb)
+		return -EBADF;
+	struct file *file = curproc->files[fd];
+	if (!file)
+		return -EBADF;
+	if (!file->op || !file->op->seek)
+		return -EINVAL; /* XXX */
+	return file->op->seek(file, off, whence);
+}
+
+static void *sys_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off)
+{
+	if (fd < 0 || (unsigned)fd >= curproc->files_nb)
+		return (void*)-EBADF;
+	struct file *file = curproc->files[fd];
+	if (!file)
+		return (void*)-EBADF;
+	if (!file->op || !file->op->mmap)
+		return (void*)-EINVAL; /* XXX */
+	/* XXX use flags, prot, addr */
+	if (addr == NULL)
+	{
+		/* XXX: reserve region into vm heap space */
+	}
+	int ret = file->op->mmap(file, curproc->vmm_ctx, addr, off, len);
+	if (ret)
+		return (void*)-ret;
+	return addr;
+}
+
 static int (*g_syscalls[])() =
 {
 	[SYS_EXIT]      = sys_exit,
@@ -516,6 +548,8 @@ static int (*g_syscalls[])() =
 	[SYS_FSTAT]     = sys_fstat,
 	[SYS_GETDENTS]  = sys_getdents,
 	[SYS_EXECVE]    = sys_execve,
+	[SYS_LSEEK]     = sys_lseek,
+	[SYS_MMAP]      = sys_mmap,
 };
 
 void call_sys(const struct int_ctx *ctx)

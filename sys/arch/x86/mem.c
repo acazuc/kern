@@ -2,6 +2,7 @@
 #include "asm.h"
 
 #include <sys/proc.h>
+#include <sys/vmm.h>
 #include <string.h>
 #include <stdlib.h>
 #include <limits.h>
@@ -20,18 +21,6 @@
  * 0xFEE00000 - 0xFEEFFFFF (1.0 MB): APIC local unit
  * 0xFEF00000 - 0xFFFDFFFF (1.0 MB): memory-mapped IO devices
  * 0xFFFE0000 - 0xFFFFFFFF (128 KB): init ROM
- */
-
-/*
- * virtual memory layout
- *
- * 0x00000000 - 0x000FFFFF (1.0 MB): unused
- * 0x00100000 - 0xBFFFFFFF (3.2 GB): userland
- * 0xC0000000 - 0xC03FFFFF (4.0 MB): kernel binary
- * 0xC0400000 - 0xC07FFFFF (4.0 MB): physical bitmap
- * 0xC0800000 - 0xC0BFFFFF (4.0 MB): kern heap page tables
- * 0xC0C00000 - 0xFFBFFFFF (1.0 GB): kern heap
- * 0xFFC00000 - 0xFFFFFFFF (4.0 MB): recursive mapping
  */
 
 /*
@@ -93,30 +82,6 @@
 #define DIR_VADDR      ((uint32_t*)0xFFFFF000)
 
 #define PAGE_MASK 0x0FFF
-
-struct vmm_range
-{
-	uint32_t addr;
-	uint32_t size;
-	TAILQ_ENTRY(vmm_range) chain;
-};
-
-TAILQ_HEAD(vmm_range_head, vmm_range);
-
-struct vmm_region
-{
-	uint32_t addr;
-	uint32_t size;
-	struct vmm_range range_0; /* always have an available item */
-	struct vmm_range_head ranges; /* address-ordered */
-};
-
-struct vmm_ctx
-{
-	uint32_t dir[1024]; /* must be at the top for page alignment */
-	struct vmm_region region;
-	uint32_t dir_paddr;
-};
 
 static struct vmm_region g_vmm_heap; /* kernel heap */
 

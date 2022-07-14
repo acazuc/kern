@@ -65,6 +65,18 @@ static void handle_dt_rel(struct elf_relro_ctx *ctx, const Elf32_Dyn *rel, const
 				vunmap(ptr, size);
 				break;
 			}
+			case R_386_GLOB_DAT:
+			{
+				assert(ctx->symtab, "no symtab on globdat rel\n");
+				assert(ctx->strtab, "no strtab on globdat rel\n");
+				uint32_t symidx = ELF32_R_SYM(r->r_info);
+				const Elf32_Sym *sym = (const Elf32_Sym*)&ctx->data[ctx->symtab->d_un.d_ptr + symidx * ctx->syment->d_un.d_val]; /* XXX test overflow */
+				void *ptr = vmap_user(ctx->vmm_ctx, (void*)addr, size);
+				assert(ptr, "can't vmap reloc\n");
+				*(uint32_t*)((uint8_t*)ptr + (reladdr - addr)) = ctx->base_addr + sym->st_value;
+				vunmap(ptr, size);
+				break;
+			}
 			default:
 				panic("unhandled reloc type: %lx\n", ELF32_R_TYPE(r->r_info));
 				break;

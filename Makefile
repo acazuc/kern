@@ -26,13 +26,13 @@ SRC_NAME = arch/x86/boot.S \
            arch/x86/mem.c \
            arch/x86/sys.c \
            dev/pic/pic.c \
-           dev/vga/vga.c \
+           dev/vga/txt.c \
+           dev/vga/rgb.c \
            dev/pit/pit.c \
            dev/com/com.c \
            dev/ps2/ps2.c \
            dev/ide/ide.c \
            dev/tty/tty.c \
-           dev/tty/vga.c \
            dev/pci/pci.c \
            dev/acpi/acpi.c \
            dev/apic/ioapic.c \
@@ -100,9 +100,10 @@ $(BIN_NAME): $(OBJ) $(LDFILE) lib bin
 
 $(ISO_NAME): $(BIN_NAME)
 	@mkdir -p $(dir $<)
-	@mkdir -p isodir
+	@mkdir -p isodir/boot
 	@cp $(BIN_NAME) isodir/boot
-	@cp grub.cfg isodir/boot
+	@mkdir -p isodir/boot/grub
+	@cp grub.cfg isodir/boot/grub
 	@grub-mkrescue -o $@ isodir
 
 $(DISK_FILE):
@@ -115,7 +116,7 @@ $(DISK_FILE):
 	@sudo mkfs.fat /dev/nbd0
 	@sudo qemu-nbd --disconnect /dev/nbd0
 
-run: all $(DISK_FILE)
+run: $(BIN_NAME) $(DISK_FILE)
 	@qemu-system-i386 \
 	-m 1024 \
 	-smp cores=2,threads=2 \
@@ -127,6 +128,16 @@ run: all $(DISK_FILE)
 	-device usb-ehci,id=ehci \
 	-nic user,model=e1000 \
 	-kernel $(BIN_NAME)
+
+runiso: $(ISO_NAME) $(DIKS_FILE)
+	@qemu-system-i386 \
+	-m 1024 \
+	-smp cores=2,threads=2 \
+	-soundhw pcspk \
+	-device qemu-xhci,id=xhci \
+	-device usb-ehci,id=ehci \
+	-nic user,model=e1000 \
+	$(ISO_NAME)
 
 size:
 	@wc `find $(SRC_PATH) -type f \( -name \*.c -o -name \*.h -o -name \*.s -o -name \*.S \)` | tail -n 1

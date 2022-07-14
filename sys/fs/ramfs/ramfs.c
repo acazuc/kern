@@ -5,6 +5,7 @@
 #include <sys/queue.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -58,10 +59,12 @@ static const struct fs_node_op g_reg_op =
 };
 
 static int reg_read(struct file *file, void *data, size_t count);
+static off_t reg_seek(struct file *file, off_t off, int whence);
 
 static const struct file_op g_reg_fop =
 {
 	.read = reg_read,
+	.seek = reg_seek,
 };
 
 struct ramfs_node
@@ -97,6 +100,31 @@ static int reg_read(struct file *file, void *data, size_t count)
 	memcpy(data, &reg->data[file->off], count);
 	file->off += count;
 	return count;
+}
+
+static off_t reg_seek(struct file *file, off_t off, int whence)
+{
+	struct ramfs_reg *reg = (struct ramfs_reg*)file->node;
+	switch (whence)
+	{
+		case SEEK_SET:
+			if (off < 0)
+				return -EINVAL;
+			file->off = off;
+			return file->off;
+		case SEEK_CUR:
+			if (off < 0 && off < -file->off)
+				return -EINVAL;
+			file->off += off;
+			return file->off;
+		case SEEK_END:
+			if (off < -(off_t)reg->size)
+				return -EINVAL;
+			file->off = reg->size + off;
+			return file->off;
+		default:
+			return -EINVAL;
+	}
 }
 
 static int dir_lookup(struct fs_node *node, const char *name, uint32_t namelen, struct fs_node **child)

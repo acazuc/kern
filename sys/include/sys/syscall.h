@@ -13,7 +13,7 @@
 #define SYS_TIME      13
 
 #define SYS_STAT      18
-
+#define SYS_LSEEK     19
 #define SYS_GETPID    20
 
 #define SYS_FSTAT     28
@@ -25,6 +25,8 @@
 #define SYS_GETPPID   64
 #define SYS_GETPGRP   65
 #define SYS_SETSID    66
+
+#define SYS_MMAP      90
 
 #define SYS_GETPGID   132
 
