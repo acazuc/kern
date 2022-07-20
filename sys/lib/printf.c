@@ -169,7 +169,7 @@ int vprintf(const char *fmt, va_list va_arg)
 	buf.size = sizeof(str);
 	buf.len = 0;
 	int ret = printf_buf(&buf, fmt, va_arg);
-	tty_write(curtty, buf.data, strlen(buf.data));
+	tty_write(curtty, buf.data, strlen(buf.data)); /* always TTY0 ? */
 	return ret;
 }
 

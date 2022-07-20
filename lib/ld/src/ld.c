@@ -215,6 +215,8 @@ int main(int argc, char **argv, char **envp)
 		goto end;
 	}
 
+	//while (1);
+
 end:
 	close(fd);
 	return 0;
@@ -225,7 +227,9 @@ void _start(int argc, char **argv, char **envp)
 	g_fd = open("/dev/tty0", O_RDONLY);
 	if (g_fd < 0)
 		exit(1);
+	write(g_fd, "ld.so\n", 6);
 	int ret = main(argc, argv, envp);
 	close(g_fd);
 	exit(ret);
+	while (1){}
 }

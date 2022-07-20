@@ -2,6 +2,8 @@
 #include "asm.h"
 
 #include <sys/proc.h>
+#include <sys/pcpu.h>
+#include <inttypes.h>
 #include <sys/vmm.h>
 #include <string.h>
 #include <stdlib.h>
@@ -133,12 +135,12 @@ end:
 
 static void pmm_free_page(uint32_t addr)
 {
-	assert(addr >= g_pmm_addr, "free_page of invalid address (too low): %lx\n", addr);
-	assert(addr < g_pmm_addr + g_pmm_size, "free_page of invalid address (too high): %lx\n", addr);
+	assert(addr >= g_pmm_addr, "free_page of invalid address (too low): %" PRIx32 "\n", addr);
+	assert(addr < g_pmm_addr + g_pmm_size, "free_page of invalid address (too high): %" PRIx32 "\n", addr);
 	uint32_t delta = (addr - g_pmm_addr) / PAGE_SIZE;
 	uint32_t *bitmap = &g_pmm_bitmap[delta / 32];
 	uint32_t mask = (1 << (delta % 32));
-	assert(*bitmap & mask, "free_page of unallocated page: %lx\n", addr);
+	assert(*bitmap & mask, "free_page of unallocated page: %" PRIx32 "\n", addr);
 	*bitmap &= ~mask;
 	if (delta < g_pmm_bitmap_first)
 		g_pmm_bitmap_first = delta;
@@ -147,16 +149,16 @@ static void pmm_free_page(uint32_t addr)
 void paging_alloc(uint32_t addr)
 {
 	addr &= ~PAGE_MASK;
-	struct vmm_ctx *ctx = curproc ? curproc->vmm_ctx : NULL;
+	struct vmm_ctx *ctx = curthread ? curthread->proc->vmm_ctx : NULL;
 	uint32_t dir_id = DIR_ID(addr);
 	uint32_t dir = ctx ? ctx->dir[dir_id] : DIR_VADDR[dir_id];
-	assert(dir & DIR_FLAG_P, "paging non-allocated memory 0x%lx\n", addr);
+	assert(dir & DIR_FLAG_P, "paging non-allocated vmem dir 0x%" PRIx32 "\n", addr);
 	uint32_t *tbl_ptr = vmap(dir & ~PAGE_MASK, PAGE_SIZE);
 	assert(tbl_ptr, "can't map tbl\n");
 	uint32_t tbl_id = TBL_ID(addr);
 	uint32_t *tbl = &tbl_ptr[tbl_id];
-	assert(!(*tbl & TBL_FLAG_P), "allocating already present page 0x%lx\n", addr);
-	assert(*tbl & TBL_FLAG_V, "writing to non-allocated vmem tbl 0x%lx\n", addr);
+	assert(!(*tbl & TBL_FLAG_P), "allocating already present page 0x%" PRIx32 "\n", addr);
+	assert(*tbl & TBL_FLAG_V, "paging non-allocated vmem tbl 0x%" PRIx32 "\n", addr);
 	uint32_t f = TBL_FLAG_RW | TBL_FLAG_P;
 	if (*tbl & TBL_FLAG_US)
 		f |= TBL_FLAG_US;
@@ -166,7 +168,7 @@ void paging_alloc(uint32_t addr)
 
 static void vmm_alloc_page(struct vmm_ctx *ctx, uint32_t addr, int user)
 {
-	assert(!(addr & PAGE_MASK), "alloc unaligned page 0x%lx\n", addr);
+	assert(!(addr & PAGE_MASK), "alloc unaligned page 0x%" PRIx32 "\n", addr);
 	uint32_t dir_id = DIR_ID(addr);
 	uint32_t *dir = ctx ? &ctx->dir[dir_id] : &DIR_VADDR[dir_id];
 	uint32_t *tbl_ptr;
@@ -188,8 +190,8 @@ static void vmm_alloc_page(struct vmm_ctx *ctx, uint32_t addr, int user)
 	}
 	uint32_t tbl_id = TBL_ID(addr);
 	uint32_t *tbl = &tbl_ptr[tbl_id];
-	assert(!(*tbl & TBL_FLAG_P), "vmalloc already created page 0x%lx\n", addr);
-	assert(!(*tbl & TBL_FLAG_V), "vmalloc already allocated page 0x%lx\n", addr);
+	assert(!(*tbl & TBL_FLAG_P), "vmalloc already created page 0x%" PRIx32 "\n", addr);
+	assert(!(*tbl & TBL_FLAG_V), "vmalloc already allocated page 0x%" PRIx32 "\n", addr);
 	uint32_t f = TBL_FLAG_V;
 	if (user)
 		f |= TBL_FLAG_US;
@@ -216,8 +218,8 @@ static void vmm_free_page(struct vmm_ctx *ctx, uint32_t addr)
 
 static void vmm_map_page(uint32_t addr, uint32_t paddr)
 {
-	assert(!(addr & PAGE_MASK), "vmap unaligned page 0x%lx\n", addr);
-	assert(!(paddr & PAGE_MASK), "vmap unaligned physical page 0x%lx\n", addr);
+	assert(!(addr & PAGE_MASK), "vmap unaligned page 0x%" PRIx32 "\n", addr);
+	assert(!(paddr & PAGE_MASK), "vmap unaligned physical page 0x%" PRIx32 "\n", addr);
 	uint32_t dir_id = DIR_ID(addr);
 	uint32_t *dir = &DIR_VADDR[dir_id];
 	if (!(*dir & DIR_FLAG_P))
@@ -228,16 +230,16 @@ static void vmm_map_page(uint32_t addr, uint32_t paddr)
 	uint32_t *tbl_ptr = TBL_VADDR(dir_id);
 	uint32_t tbl_id = TBL_ID(addr);
 	uint32_t *tbl = &tbl_ptr[tbl_id];
-	assert(!(*tbl & TBL_FLAG_P), "vmap already created page 0x%lx\n", addr);
-	assert(!(*tbl & TBL_FLAG_V), "vmap already allocated page 0x%lx\n", addr);
+	assert(!(*tbl & TBL_FLAG_P), "vmap already created page 0x%" PRIx32 "\n", addr);
+	assert(!(*tbl & TBL_FLAG_V), "vmap already allocated page 0x%" PRIx32 "\n", addr);
 	*tbl = mkentry(paddr, TBL_FLAG_RW | TBL_FLAG_P);
 	invlpg(addr);
 }
 
 static void vmm_map_user_page(struct vmm_ctx *ctx, uint32_t addr, uint32_t uaddr)
 {
-	assert(!(addr & PAGE_MASK), "vmap unaligned page 0x%lx\n", addr);
-	assert(!(uaddr & PAGE_MASK), "vmap unaligned user page 0x%lx\n", uaddr);
+	assert(!(addr & PAGE_MASK), "vmap unaligned page 0x%" PRIx32 "\n", addr);
+	assert(!(uaddr & PAGE_MASK), "vmap unaligned user page 0x%" PRIx32 "\n", uaddr);
 	uint32_t dir_id = DIR_ID(uaddr);
 	uint32_t *dir = &ctx->dir[dir_id];
 	uint32_t *tbl_ptr;
@@ -263,7 +265,7 @@ static void vmm_map_user_page(struct vmm_ctx *ctx, uint32_t addr, uint32_t uaddr
 	}
 	else
 	{
-		assert((*tbl & TBL_FLAG_V), "vmap non allocated page 0x%lx\n", uaddr);
+		assert((*tbl & TBL_FLAG_V), "vmap non allocated page 0x%" PRIx32 "\n", uaddr);
 		paddr = pmm_alloc_page();
 		*tbl = mkentry(paddr, TBL_FLAG_RW | TBL_FLAG_P | TBL_FLAG_US);
 	}
@@ -279,7 +281,7 @@ static void vmm_unmap_page(uint32_t addr)
 	uint32_t *tbl_ptr = TBL_VADDR(dir_id);
 	uint32_t tbl_id = TBL_ID(addr);
 	uint32_t tbl = tbl_ptr[tbl_id];
-	assert(tbl & TBL_FLAG_P, "unmap non-mapped page 0x%08lx\n", addr);
+	assert(tbl & TBL_FLAG_P, "unmap non-mapped page 0x%08" PRIx32 "\n", addr);
 	tbl_ptr[tbl_id] = mkentry(0, 0);
 	invlpg(addr);
 }
@@ -548,12 +550,12 @@ struct vmm_ctx *vmm_ctx_dup(const struct vmm_ctx *ctx)
 static void *vmalloc_zone(struct vmm_ctx *ctx, void *ptr, size_t size, int user)
 {
 	uint32_t addr = (uint32_t)ptr;
-	assert(!(addr & PAGE_MASK), "vmalloc unaligned addr 0x%lx\n", addr);
-	assert(!(size & PAGE_MASK), "vmalloc unaligned size 0x%lx\n", size);
+	assert(!(addr & PAGE_MASK), "vmalloc unaligned addr 0x%" PRIx32 "\n", addr);
+	assert(!(size & PAGE_MASK), "vmalloc unaligned size 0x%" PRIx32 "\n", size);
 	addr = vmm_get_free_range(ctx ? &ctx->region : &g_vmm_heap, addr, size);
 	if (addr == UINT32_MAX)
 		return NULL;
-	assert(!(addr & PAGE_MASK), "vmalloc unaligned data 0x%lx\n", addr);
+	assert(!(addr & PAGE_MASK), "vmalloc unaligned data 0x%" PRIx32 "\n", addr);
 	for (uint32_t i = 0; i < size; i += PAGE_SIZE)
 		vmm_alloc_page(ctx, addr + i, user);
 	return (void*)addr;
@@ -562,8 +564,8 @@ static void *vmalloc_zone(struct vmm_ctx *ctx, void *ptr, size_t size, int user)
 static void vfree_zone(struct vmm_ctx *ctx, void *ptr, size_t size)
 {
 	uint32_t addr = (uint32_t)ptr;
-	assert(!(addr & PAGE_MASK), "free of unaligned addr: 0x%lx\n", addr);
-	assert(!(size & PAGE_MASK), "free of unaligned size: 0x%lx\n", size);
+	assert(!(addr & PAGE_MASK), "free of unaligned addr: 0x%" PRIx32 "\n", addr);
+	assert(!(size & PAGE_MASK), "free of unaligned size: 0x%" PRIx32 "\n", size);
 	for (uint32_t i = 0; i < size; i += PAGE_SIZE)
 		vmm_free_page(ctx, addr + i);
 	vmm_set_free_range(ctx ? &ctx->region : &g_vmm_heap, addr, size);
@@ -596,12 +598,12 @@ void vfree_user(struct vmm_ctx *ctx, void *ptr, size_t size)
 
 void *vmap(size_t paddr, size_t size)
 {
-	assert(!(paddr & PAGE_MASK), "vmap unaligned addr 0x%lx\n", paddr);
-	assert(!(size  & PAGE_MASK), "vmap unaligned size 0x%lx\n", size);
+	assert(!(paddr & PAGE_MASK), "vmap unaligned addr 0x%" PRIx32 "\n", paddr);
+	assert(!(size  & PAGE_MASK), "vmap unaligned size 0x%" PRIx32 "\n", size);
 	uint32_t addr = vmm_get_free_range(&g_vmm_heap, 0, size);
 	if (addr == UINT32_MAX)
 		return NULL;
-	assert(!(addr & PAGE_MASK), "vmap unaligned data 0x%lx\n", addr);
+	assert(!(addr & PAGE_MASK), "vmap unaligned data 0x%" PRIx32 "\n", addr);
 	for (uint32_t i = 0; i < size; i += PAGE_SIZE)
 		vmm_map_page(addr + i, paddr + i);
 	return (void*)addr;
@@ -611,12 +613,12 @@ void *vmap_user(struct vmm_ctx *ctx, void *ptr, size_t size)
 {
 	assert(ctx, "no vmm ctx given\n");
 	uint32_t uaddr = (uint32_t)ptr;
-	assert(!(uaddr & PAGE_MASK), "vmap unaligned addr 0x%lx\n", uaddr);
-	assert(!(size & PAGE_MASK), "vmap unaligned size 0x%lx\n", size);
+	assert(!(uaddr & PAGE_MASK), "vmap unaligned addr 0x%" PRIx32 "\n", uaddr);
+	assert(!(size & PAGE_MASK), "vmap unaligned size 0x%" PRIx32 "\n", size);
 	uint32_t addr = vmm_get_free_range(&g_vmm_heap, 0, size);
 	if (addr == UINT32_MAX)
 		return NULL;
-	assert(!(addr & PAGE_MASK), "vmap unaligned data 0x%lx\n", addr);
+	assert(!(addr & PAGE_MASK), "vmap unaligned data 0x%" PRIx32 "\n", addr);
 	for (uint32_t i = 0; i < size; i += PAGE_SIZE)
 		vmm_map_user_page(ctx, addr + i, uaddr + i);
 	return (void*)addr;
@@ -625,8 +627,8 @@ void *vmap_user(struct vmm_ctx *ctx, void *ptr, size_t size)
 void vunmap(void *ptr, size_t size)
 {
 	uint32_t addr = (uint32_t)ptr;
-	assert(!(addr & PAGE_MASK), "vunmap unaligned addr 0x%lx\n", addr);
-	assert(!(size & PAGE_MASK), "vunmap unaligned size 0x%lx\n", size);
+	assert(!(addr & PAGE_MASK), "vunmap unaligned addr 0x%" PRIx32 "\n", addr);
+	assert(!(size & PAGE_MASK), "vunmap unaligned size 0x%" PRIx32 "\n", size);
 	vmm_set_free_range(&g_vmm_heap, addr, size);
 	for (uint32_t i = 0; i < size; i += PAGE_SIZE)
 		vmm_unmap_page(addr + i);
@@ -637,7 +639,7 @@ static void init_physical_maps(void)
 	uint32_t pages_count = g_pmm_size / PAGE_SIZE;
 	g_pmm_bitmap_size = (pages_count + 31) / 32;
 	if (g_pmm_bitmap_size * 32 >= PAGE_SIZE * 0x400) /* arbitrary: must not be greater than a single dir */
-		panic("bitmap size too long: %lu / %u", g_pmm_bitmap_size * 4, PAGE_SIZE * 0x400);
+		panic("bitmap size too long: %" PRId32 " / %d", g_pmm_bitmap_size * 4, PAGE_SIZE * 0x400);
 
 	uint32_t bitmap_bytes = g_pmm_bitmap_size * sizeof(uint32_t);
 	uint32_t bitmap_pages = (bitmap_bytes + PAGE_SIZE - 1) / PAGE_SIZE;
@@ -666,7 +668,7 @@ static void init_heap_pages_tables(void)
 	{
 		uint32_t dir_id = DIR_ID(addr);
 		uint32_t *dir = &DIR_VADDR[dir_id];
-		assert(!*dir, "non-NULL heap page table 0x%lx\n", addr);
+		assert(!*dir, "non-NULL heap page table 0x%" PRIx32 "\n", addr);
 		*dir = mkentry(pmm_alloc_page(), DIR_FLAG_P | DIR_FLAG_RW);
 		uint32_t *tbl_ptr = TBL_VADDR(dir_id);
 		memset(tbl_ptr, 0, PAGE_SIZE);
@@ -677,7 +679,7 @@ void paging_init(uint32_t addr, uint32_t size)
 {
 	g_pmm_addr = addr;
 	g_pmm_size = size;
-	printf("initializing memory 0x%lx-0x%lx (%lu)\n", addr, addr + size, size);
+	printf("initializing memory 0x%" PRIx32 "-0x%" PRIx32 " (%" PRIu32 ")\n", addr, addr + size, size);
 	init_physical_maps();
 	init_heap_pages_tables();
 	g_vmm_heap.addr = VADDR_HEAP_BEG;
@@ -704,7 +706,7 @@ static void pmm_dumpinfo(void)
 				pages_used++;
 		}
 	}
-	printf("pages used: 0x%05lx / 0x%05lx (%d%%); first available: %05lx\n", pages_used, g_pmm_bitmap_size * 32, (int)(pages_used / (float)(g_pmm_bitmap_size * 32) * 100), g_pmm_bitmap_first);
+	printf("pages used: 0x%05" PRIx32 " / 0x%05" PRIx32 " (%d%%); first available: %05" PRIx32 "\n", pages_used, g_pmm_bitmap_size * 32, (int)(pages_used / (float)(g_pmm_bitmap_size * 32) * 100), g_pmm_bitmap_first);
 }
 
 static void vmm_dumpinfo(void)
@@ -712,7 +714,7 @@ static void vmm_dumpinfo(void)
 	printf("kernel heap:\n");
 	struct vmm_range *item;
 	TAILQ_FOREACH(item, &g_vmm_heap.ranges, chain)
-		printf("0x%lx - 0x%lx: 0x%lx bytes\n", item->addr, item->addr + item->size, item->size);
+		printf("0x%" PRIx32 " - 0x%" PRIx32 ": 0x%" PRIx32 " bytes\n", item->addr, item->addr + item->size, item->size);
 }
 
 void paging_dumpinfo()

@@ -2,7 +2,7 @@ isr_common:
 	;save ctx
 	push dword [esp + 1 * 4] ;err
 	push dword [esp + 5 * 4] ;ef
-	push dword [esp + 8 * 4] ;ss
+	push ss
 	push gs
 	push fs
 	push es
@@ -10,7 +10,9 @@ isr_common:
 	push dword [esp + 10 * 4] ;cs
 	push dword [esp + 10 * 4] ;eip
 	push ebp
-	push dword [esp + 15 * 4] ;esp
+	mov ebp, esp
+	add ebp, 15 * 4
+	push ebp
 	push edi
 	push esi
 	push edx
@@ -18,6 +20,16 @@ isr_common:
 	push ebx
 	push eax
 
+	;if ring has been crossed, load ss & esp from int stack
+	mov eax, [esp + 15 * 4]
+	test eax, 0x3000
+	jz .no_ring_cross_pre
+	mov eax, [esp + 23 * 4] ;ss
+	mov [esp + 14 * 4], eax
+	mov eax, [esp + 22 * 4] ;esp
+	mov [esp + 6 * 4], eax
+
+.no_ring_cross_pre:
 	;set kernel segments
 	mov ax, 0x10
 	mov ds, ax
@@ -31,33 +43,50 @@ isr_common:
 	push dword [esp + 18 * 4] ;id
 	cld
 	call handle_interrupt
-	add esp, 8
+	add esp, 2 * 4
 
 	;restore ctx
+	mov eax, [esp + 8 * 4]
+	mov [esp + 19 * 4], eax ;eip
 	mov eax, [esp + 9 * 4]
 	mov [esp + 20 * 4], eax ;cs
+	mov eax, [esp + 15 * 4]
+	mov [esp + 21 * 4], eax ;ef
+	test eax, 0x3000
+	jz .no_ring_cross_post
 	mov eax, [esp + 14 * 4]
 	mov [esp + 23 * 4], eax ;ss
 	mov eax, [esp + 6 * 4]
 	mov [esp + 22 * 4], eax ;esp
-	mov eax, [esp + 8 * 4]
-	mov [esp + 19 * 4], eax ;eip
-	mov eax, [esp + 15 * 4]
-	mov [esp + 21 * 4], eax ;ef
+
+.no_ring_cross_post:
 	pop eax
 	pop ebx
 	pop ecx
 	pop edx
 	pop esi
 	pop edi
-	add esp, 4 ;esp
+	add esp, 1 * 4 ;esp
 	pop ebp
-	add esp, 8 ;eip, cs
+	add esp, 2 * 4 ;eip, cs
 	pop ds
 	pop es
 	pop fs
 	pop gs
-	add esp, 20 ;ss, ef, err, id, err
+	push eax
+	mov eax, [esp + 2 * 4]
+	test eax, 0x3000
+	jnz .ring_cross_end
+
+	;set esp & ss if going to ring 0
+	pop eax
+	mov esp, [esp - 8 * 4]
+	sub esp, 3 * 4
+	iret
+
+.ring_cross_end:
+	pop eax
+	add esp, 5 * 4 ;ss, ef, err, id, err
 	iret
 
 %macro isr_err 1
@@ -77,6 +106,7 @@ isr_%+%1:
 
 extern handle_interrupt
 
+;exceptions
 isr_no_err 0
 isr_no_err 1
 isr_no_err 2

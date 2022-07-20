@@ -102,18 +102,24 @@ static struct page *alloc_page(enum block_type type, size_t size)
 	size_t alloc_size;
 	size_t blocks_size;
 	size_t meta_size;
+	size_t align_size;
 
 	if (type != BLOCK_LARGE)
+	{
 		blocks_size = sizeof(size_t) * BLOCKS_SIZE;
+		align_size = g_block_sizes[type];
+	}
 	else
+	{
 		blocks_size = 0;
+		align_size = PAGE_SIZE;
+	}
 	meta_size = sizeof(*page) + blocks_size;
-	meta_size += size + 1; /* align blocks */
-	meta_size -= meta_size % size;
+	meta_size += align_size - 1; /* align blocks */
+	meta_size -= meta_size % align_size;
 	alloc_size = size + meta_size;
 	alloc_size += PAGE_SIZE - 1;
 	alloc_size -= alloc_size % PAGE_SIZE;
-	/* XXX: create alloc_size var in page, set size = alloc_size - sizeof(*page) */
 	page = vmalloc(alloc_size);
 	if (!page)
 		return NULL;
@@ -178,7 +184,7 @@ static int get_first_free(struct page *page)
 			if (!(block & (1 << j)))
 				return i * BLOCK_BITS + j;
 		}
-		panic("block != 0xFFFFFFFF but no bit found");
+		panic("block != -1 but no bit found");
 	}
 	return -1;
 }

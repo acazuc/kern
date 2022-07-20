@@ -5,6 +5,7 @@
 #include <termios.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <mutex.h>
 
 #define TTY_STOPPED (1 << 0)
 #define TTY_EOF     (1 << 1)
@@ -27,6 +28,7 @@ struct tty
 	size_t rbuf_size;
 	size_t line_size;
 	size_t ctrl_state;
+	mutex_t mutex;
 	void *userptr;
 };
 

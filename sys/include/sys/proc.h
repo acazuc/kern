@@ -4,6 +4,7 @@
 #include "arch/arch.h"
 #include <sys/queue.h>
 #include <sys/types.h>
+#include <sys/pcpu.h>
 
 struct vmm_ctx;
 struct fs_node;
@@ -38,17 +39,19 @@ enum thread_state
 	THREAD_RUNNING, /* currently executed */
 	THREAD_PAUSED,  /* paused by scheduler */
 	THREAD_WAITING, /* waiting for lock */
+	THREAD_ZOMBIE,  /* dead */
 };
 
 struct thread
 {
 	struct proc *proc;
 	enum thread_state state;
-	struct trapframe trapframe;
+	struct trapframe tf;
 	size_t stack_size;
 	uint8_t *stack;
 	size_t int_stack_size;
 	uint8_t *int_stack;
+	cpumask_t affinity;
 	pid_t tid;
 	pri_t pri;
 	TAILQ_ENTRY(thread) sched_chain;
@@ -64,10 +67,5 @@ struct thread *uproc_create_elf(const char *name, struct file *file, const char 
 int elf_createctx(struct file *file, struct vmm_ctx *vmm_ctx, void **entry);
 
 void proc_delete(struct proc *proc);
-
-extern struct proc *curproc;
-extern struct thread *curthread;
-extern struct proc *idle_proc;
-extern struct thread *idle_thread;
 
 #endif

@@ -8,9 +8,6 @@
 #include "arch/x86/asm.h"
 #include "fs/vfs.h"
 
-struct thread *curthread;
-struct proc *curproc;
-
 static pid_t g_pid;
 static pid_t g_tid;
 
@@ -43,6 +40,7 @@ static struct thread *proc_create(const char *name, struct vmm_ctx *vmm_ctx, voi
 	proc->gid = 0;
 	proc->egid = 0;
 	proc->sgid = 0;
+	CPUMASK_FILL(&thread->affinity);
 	thread->state = THREAD_PAUSED;
 	thread->stack_size = 1024 * 16;
 	thread->stack = vmalloc_user(proc->vmm_ctx, (void*)(0xC0000000 - thread->stack_size), thread->stack_size); /* XXX aslr */
@@ -107,7 +105,7 @@ static void insert_argv_envp(struct thread *thread, const char * const * argv, c
 	*(int*)stackp = argc;
 	stackp -= sizeof(char*); /* stack return value */
 	*(int*)stackp = 0;
-	thread->trapframe.esp = (uint32_t)(thread->stack + (stackp - stackorg));
+	thread->tf.esp = (uint32_t)(thread->stack + (stackp - stackorg));
 	vunmap(stackorg, thread->stack_size);
 }
 
@@ -199,13 +197,14 @@ struct thread *proc_fork(struct thread *thread)
 	newt->state = thread->state;
 	if (newt->state == THREAD_RUNNING)
 		newt->state = THREAD_PAUSED;
-	memcpy(&newt->trapframe, &thread->trapframe, sizeof(newt->trapframe));
+	memcpy(&newt->tf, &thread->tf, sizeof(newt->tf));
 	newt->stack_size = thread->stack_size;
 	newt->stack = thread->stack; /* already copied by vmm_ctx_dup */
 	newt->int_stack_size = thread->int_stack_size;
 	newt->int_stack = vmalloc(newt->int_stack_size);
 	assert(newt->int_stack, "can't allocate new thread int stack\n");
 	memset(newt->int_stack, 0, thread->int_stack_size); /* memory must be mapped */
+	newt->affinity = thread->affinity;
 	newt->tid = ++g_tid;
 	newt->pri = thread->pri;
 	TAILQ_INSERT_TAIL(&newp->threads, newt, thread_chain);

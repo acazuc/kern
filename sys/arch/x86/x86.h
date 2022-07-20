@@ -9,6 +9,8 @@
 
 #define PAGE_SIZE 4096
 
+#define MAXCPU 256
+
 enum isa_irq_id
 {
 	ISA_IRQ_PIT,

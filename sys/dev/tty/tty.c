@@ -78,6 +78,7 @@ int tty_create(const char *name, dev_t rdev, struct tty_op *op, struct tty **tty
 	if (!*tty)
 		return ENOMEM;
 	(*tty)->op = op;
+	mutex_init(&(*tty)->mutex);
 	(*tty)->rbuf_size = 0;
 	(*tty)->wbuf_size = 0;
 	(*tty)->ctrl_state = 0;
@@ -243,6 +244,7 @@ int tty_write(struct tty *tty, const void *data, size_t count)
 {
 	if (!tty || !tty->op)
 		return -EINVAL; /* XXX */
+	mutex_lock(&tty->mutex);
 	const char *s = data;
 	for (size_t i = 0; i < count; ++i)
 	{
@@ -672,5 +674,6 @@ int tty_write(struct tty *tty, const void *data, size_t count)
 				break;
 		}
 	}
+	mutex_unlock(&tty->mutex);
 	return count;
 }

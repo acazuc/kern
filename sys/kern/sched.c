@@ -1,4 +1,5 @@
 #include <sys/proc.h>
+#include <sys/pcpu.h>
 #include <stddef.h>
 #include <stdio.h>
 
@@ -48,16 +49,16 @@ static void change_thread(struct thread *thread)
 	if (thread == curthread)
 		return;
 #if 0
-	printf("changing thread from %p (%s; %#lx) to %p (%s; %#lx)\n", curthread, curthread->proc->name, curthread->trapframe.eip, thread, thread->proc->name, thread->trapframe.eip);
+	printf("changing thread from %p (%s; %#" PRIx32 ") to %p (%s; %#" PRIx32 ")\n", curthread, curthread->proc->name, curthread->trapframe.eip, thread, thread->proc->name, thread->trapframe.eip);
 #endif
 	if (curthread->state == THREAD_RUNNING)
 		sched_run(curthread);
 	curthread->state = THREAD_PAUSED;
 	curthread = thread;
-	curproc = thread->proc;
+	curthread->proc = thread->proc;
 	curthread->state = THREAD_RUNNING;
 	TAILQ_REMOVE(&g_queue, thread, queue_chain);
-	vmm_setctx(curproc->vmm_ctx);
+	vmm_setctx(curthread->proc->vmm_ctx);
 }
 
 static struct thread *find_thread(void)

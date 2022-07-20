@@ -2,6 +2,7 @@
 #include "arch/x86/asm.h"
 #include "arch/x86/x86.h"
 
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -28,7 +29,7 @@ static void init_port(uint16_t port)
 	outb(port + 0x0, 0xAE); /* send test */
 	if (inb(port + 0x0) != 0xAE)
 	{
-		printf("port %d test failed", port);
+		printf("port %" PRId16 " test failed", port);
 		/* XXX: set disabled state */
 		return;
 	}

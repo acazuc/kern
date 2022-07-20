@@ -1,6 +1,7 @@
 #include "acpi.h"
 #include "arch/x86/x86.h"
 
+#include <inttypes.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
@@ -271,7 +272,7 @@ static const void *find_table(const struct rsdt *rsdt, const char *name)
 static void handle_madt(const struct madt *madt)
 {
 	uint8_t checksum = acpi_table_checksum(&madt->hdr);
-	assert(!checksum, "invalid madt checksum: %02x\n", checksum);
+	assert(!checksum, "invalid madt checksum: %02" PRIx8 "\n", checksum);
 	struct madt_entry *entry = (struct madt_entry*)((uint8_t*)madt + sizeof(*madt));
 	do
 	{
@@ -281,7 +282,7 @@ static void handle_madt(const struct madt *madt)
 			{
 				struct madt_local_apic *local_apic = (struct madt_local_apic*)entry;
 #if 0
-				printf("local apic: %u %u %lx\n", local_apic->acpi_cpuid, local_apic->apic_id, local_apic->flags);
+				printf("local apic: %" PRIu8 " %" PRIu8 " %" PRIx32 "\n", local_apic->acpi_cpuid, local_apic->apic_id, local_apic->flags);
 #endif
 				break;
 			}
@@ -289,7 +290,7 @@ static void handle_madt(const struct madt *madt)
 			{
 				struct madt_io_apic *io_apic = (struct madt_io_apic*)entry;
 #if 0
-				printf("io apic: %u, %lx, %lx\n", io_apic->apic_id, io_apic->apic_addr, io_apic->gsib);
+				printf("io apic: %" PRIu8 ", %" PRIx32 ", %" PRIx32 "\n", io_apic->apic_id, io_apic->apic_addr, io_apic->gsib);
 #endif
 				break;
 			}
@@ -298,7 +299,7 @@ static void handle_madt(const struct madt *madt)
 				struct madt_int_src_override *src_override = (struct madt_int_src_override*)entry;
 				g_isa_irq[src_override->source] = src_override->gsi;
 #if 0
-				printf("int src override: %x, %lx, %x\n", src_override->source, src_override->gsi, src_override->flags);
+				printf("int src override: %" PRIx8 ", %" PRIx32 ", %" PRIx8 "\n", src_override->source, src_override->gsi, src_override->flags);
 #endif
 				break;
 			}
@@ -311,7 +312,7 @@ static void handle_madt(const struct madt *madt)
 				break;
 			}
 			default:
-				panic("unhandled madt entry type: %x\n", entry->type);
+				panic("unhandled madt entry type: %" PRIx8 "\n", entry->type);
 		}
 		entry = (struct madt_entry*)((uint8_t*)entry + entry->length);
 	} while ((uint8_t*)entry < (uint8_t*)madt + madt->hdr.length);
@@ -325,7 +326,7 @@ static void handle_hpet(const struct hpet *hpet)
 static void handle_rsdt(const struct rsdt *rsdt)
 {
 	uint8_t checksum = acpi_table_checksum(&rsdt->hdr);
-	assert(!checksum, "invalid rsdt checksum: %02x\n", checksum);
+	assert(!checksum, "invalid rsdt checksum: %02" PRIx8 "\n", checksum);
 	const struct fadt *fadt = find_table(rsdt, "FACP");
 #if 0
 	printf("fadt: %p\n", fadt);
@@ -347,7 +348,7 @@ static void handle_rsdp(const struct rsdp *rsdp)
 	uint8_t checksum = 0;
 	for (size_t i = 0; i < sizeof(*rsdp); ++i)
 		checksum += ((const uint8_t*)rsdp)[i];
-	assert(!checksum, "invalid rsdp checksum: %02x\n", checksum);
+	assert(!checksum, "invalid rsdp checksum: %02" PRIx8 "\n", checksum);
 	uint32_t rsdt_addr;
 	if (rsdp->revision >= 2)
 	{
@@ -355,7 +356,7 @@ static void handle_rsdp(const struct rsdp *rsdp)
 		uint8_t checksum = 0;
 		for (size_t i = 0; i < sizeof(*rsdp) + sizeof(*rsdp2); ++i)
 			checksum += ((const uint8_t*)rsdp)[i];
-		assert(!checksum, "invalid rsdp2 checksum: %02x\n", checksum);
+		assert(!checksum, "invalid rsdp2 checksum: %02" PRIx8 "\n", checksum);
 		rsdt_addr = rsdp2->xsdt;
 	}
 	else

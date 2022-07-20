@@ -10,12 +10,15 @@
 #include "dev/rtc/rtc.h"
 #include "dev/acpi/acpi.h"
 #include "dev/apic/apic.h"
+#include "arch/arch.h"
 #include "fs/vfs.h"
 #include "x86.h"
 #include "asm.h"
+#include "msr.h"
 
 #include <sys/sched.h>
 #include <multiboot.h>
+#include <sys/pcpu.h>
 #include <sys/file.h>
 #include <sys/proc.h>
 #include <inttypes.h>
@@ -25,10 +28,10 @@
 
 int g_isa_irq[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
 
-static int has_apic; /* XXX */
+struct pcpu pcpu[MAXCPU];
+uint8_t *ap_stacks[MAXCPU];
 
-struct thread *idle_thread;
-struct proc *idle_proc;
+static int has_apic; /* XXX */
 
 enum cpuid_feature
 {
@@ -171,30 +174,30 @@ static const char *cpuid_feature_edx_str[32] =
 static void print_multiboot(struct multiboot_info *mb_info)
 {
 	printf("mb_info: %p\n", mb_info);
-	printf("multiboot flags: %08x\n", mb_info->flags);
+	printf("multiboot flags: %08" PRIx32 "\n", mb_info->flags);
 	if (mb_info->flags & MULTIBOOT_INFO_CMDLINE)
 		printf("cmdline: %p\n", (char*)mb_info->cmdline);
 	if (mb_info->flags & MULTIBOOT_INFO_BOOT_LOADER_NAME)
 		printf("bootloader: %p\n", (char*)mb_info->boot_loader_name);
-	printf("BIOS mem: %08x - %08x\n", mb_info->mem_lower, mb_info->mem_upper);
+	printf("BIOS mem: %08" PRIx32 " - %08" PRIx32 "\n", mb_info->mem_lower, mb_info->mem_upper);
 	uint64_t total_mem = 0;
 	if (mb_info->flags & MULTIBOOT_INFO_MEM_MAP)
 	{
 		for (size_t i = 0; i < mb_info->mmap_length; i += sizeof(multiboot_memory_map_t))
 		{
 			multiboot_memory_map_t *mmap = (multiboot_memory_map_t*)(mb_info->mmap_addr + i);
-			printf("mmap %p: %016llx @ %016llx (%08x)\n", mmap, mmap->len, mmap->addr, mmap->type);
+			printf("mmap %p: %016" PRIx64 " @ %016" PRIx64 " (%08" PRIx32 ")\n", mmap, mmap->len, mmap->addr, mmap->type);
 			if (mmap->type == MULTIBOOT_MEMORY_AVAILABLE)
 				total_mem += mmap->len;
 		}
 	}
-	printf("total usable memory: %llu MB\n", total_mem / 1024 / 1024);
+	printf("total usable memory: %" PRIu64 " MB\n", total_mem / 1024 / 1024);
 	if (mb_info->flags & MULTIBOOT_INFO_DRIVE_INFO)
 	{
 		for (size_t i = 0; i < mb_info->drives_length;)
 		{
 			multiboot_drive_info_t *drive = (multiboot_drive_info_t*)(mb_info->drives_addr + i);
-			printf("number: %hhx, mode: %hhx, cylinders: %hx, heads: %hhx, sectors: %hhx\n", drive->number, drive->mode, drive->cylinders, drive->heads, drive->sectors);
+			printf("number: %" PRIx8 ", mode: %" PRIx8 ", cylinders: %" PRIx16 ", heads: %" PRIx8 ", sectors: %" PRIx8 "\n", drive->number, drive->mode, drive->cylinders, drive->heads, drive->sectors);
 			i += drive->size;
 		}
 	}
@@ -231,13 +234,13 @@ static void print_cpuid(void)
 		type =       (eax >> 0x0C) & 0x3;
 		ext_model =  (eax >> 0x10) & 0xF;
 		ext_family = (eax >> 0x14) & 0xFF;
-		printf("stepping: %01x, model: %01x, family: %01x, type: %01x, ext_model: %01x, ext_family: %02x\n", stepping, model, family, type, ext_model, ext_family);
+		printf("stepping: %01" PRIx8 ", model: %01" PRIx8 ", family: %01" PRIx8 ", type: %01" PRIx8 ", ext_model: %01" PRIx8 ", ext_family: %02" PRIx8 "\n", stepping, model, family, type, ext_model, ext_family);
 		uint8_t brand, clflush_size, addressable_ids, apic_id;
-		brand =           (ebx >> 0x0) & 0xFF;
-		clflush_size =    (ebx >> 0x4) & 0xFF;
-		addressable_ids = (ebx >> 0x8) & 0xFF;
-		apic_id =         (ebx >> 0xC) & 0xFF;
-		printf("brand: %02x, clflush_size: %02x, addressable_ids: %02x, apic_id: %02x\n", brand, clflush_size, addressable_ids, apic_id);
+		brand =           (ebx >>  0) & 0xFF;
+		clflush_size =    (ebx >>  8) & 0xFF;
+		addressable_ids = (ebx >> 16) & 0xFF;
+		apic_id =         (ebx >> 24) & 0xFF;
+		printf("brand: %02" PRIx8 ", clflush_size: %02" PRIx8 ", addressable_ids: %02" PRIx8 ", apic_id: %02" PRIx8 "\n", brand, clflush_size, addressable_ids, apic_id);
 		printf("features: ");
 		int first = 1;
 		for (size_t i = 0; i < 32; ++i)
@@ -296,7 +299,7 @@ static void tty_init(void)
 	curtty = ttys[0];
 }
 
-static void idle_loop()
+static void idle_loop(void)
 {
 	while (1)
 	{
@@ -305,14 +308,105 @@ static void idle_loop()
 	}
 }
 
+void ap_trampoline();
+
+volatile int ap_startup_done;
+volatile size_t ap_running = 1;
+
+void ap_startup(void *p)
+{
+	uint32_t cpuid = curcpu();
+	printf("running ap %" PRIu32 "\n", cpuid);
+	while (1);
+	char name[64];
+	snprintf(name, sizeof(name), "idle%" PRIu32, cpuid);
+	const char *argv[] = {"idle", NULL};
+	const char *envp[] = {NULL};
+	idlethread = kproc_create(name, idle_loop, argv, envp);
+	idlethread->pri = 255;
+	CPUMASK_CLEAR(&idlethread->affinity);
+	CPUMASK_SET(&idlethread->affinity, cpuid, 1);
+	sched_add(idlethread);
+	idlethread->state = THREAD_RUNNING;
+	curthread = idlethread;
+	idle_loop();
+	panic("post idle loop\n");
+	while(1);
+}
+
+static void start_ap(void)
+{
+	uint8_t lapic_id = curcpu();
+	size_t numcores = 4;
+	uint8_t lapics[] = {0, 1, 2, 3}; /* XXX */
+
+	void *dst = vmap(0x8000, 4096);
+	memcpy(dst, &ap_trampoline, 4096);
+	uint8_t *apic_table = (uint8_t*)dst + 0x60;
+
+	uint32_t msrl, msrh;
+	rdmsr(IA32_APIC_BASE, &msrh, &msrl);
+	volatile uint32_t *lapic_ptr = vmap(msrl & 0xFFFFF000, 4096);
+	assert(lapic_ptr, "can't map lapic ptr\n");
+
+	for (size_t i = 0; i < numcores; ++i)
+	{
+		if (lapics[i] == lapic_id)
+			continue;
+		uint8_t **stackp = &pcpu[lapics[i]].stack;
+		size_t *stack_size = &pcpu[lapics[i]].stack_size;
+		*stack_size = 1024 * 16;
+		*stackp = vmalloc(*stack_size);
+		assert(*stackp, "can't malloc ap stack");
+		memset(*stackp, 0, *stack_size); /* must be mapped */
+		*stackp += *stack_size;
+		ap_stacks[lapics[i]] = *stackp;
+
+		/* INIT IPI */
+		lapic_ptr[0xA0] = 0;
+		lapic_ptr[0xC4] = (lapic_ptr[0xC4] & 0x00FFFFFF) | (i << 24);
+		lapic_ptr[0xC0] = (lapic_ptr[0xC0] & 0xFFF00000) | 0x00C500;
+		do
+		{
+			__asm__ volatile ("pause" : : : "memory");
+		} while (lapic_ptr[0xC0] & (1 << 12));
+
+		lapic_ptr[0xC4] = (lapic_ptr[0xC4] & 0x00FFFFFF) | (i << 24);
+		lapic_ptr[0xC0] = (lapic_ptr[0xC0] & 0xFFF00000) | 0x008500;
+		do
+		{
+			__asm__ volatile ("pause" : : : "memory");
+		} while (lapic_ptr[0xC0] & (1 << 12));
+
+		/* XXX wait 10 ms */
+		/* XXX send startup only if not 82489DX */
+		for (size_t j = 0; j < 2; ++j)
+		{
+			/* STARTUP IPI */
+			lapic_ptr[0xA0] = 0;
+			lapic_ptr[0xC4] = (lapic_ptr[0xC4] & 0x00FFFFFF) | (i << 24);
+			lapic_ptr[0xC0] = (lapic_ptr[0xC0] & 0xFFF0F800) | 0x000608;
+			/* XXX wait 200 us */
+			do
+			{
+				__asm__ volatile ("pause" : : : "memory");
+			} while (lapic_ptr[0xC0] & (1 << 12));
+		}
+	}
+	vunmap((void*)lapic_ptr, 4096);
+	vunmap(dst, 4096);
+	ap_startup_done = 1; /* release all the AP */
+	while (ap_running < numcores) {}
+}
+
 void kernel_main(struct multiboot_info *mb_info)
 {
 	cli();
-	alloc_init();
 	uint32_t mem_size = mb_get_memory_map_size(mb_info);
 	assert(mem_size, "can't get memory map\n");
 	assert(mem_size >= 0x1000000, "can't get 16MB of memory\n");
 	paging_init(0x1000000, mem_size - 0x1000000);
+	alloc_init();
 	if (mb_info->flags & MULTIBOOT_INFO_FRAMEBUFFER_INFO)
 	{
 		switch (mb_info->framebuffer_type)
@@ -335,9 +429,10 @@ void kernel_main(struct multiboot_info *mb_info)
 	gdt_init();
 	idt_init();
 	pic_init(0x20, 0x28);
+	com_init();
 	vfs_init();
 	tty_init();
-	*(uint32_t*)(0xFFFFF000) = 0; /* remove identity paging at 0x00000000 */
+	print_cpuid();
 	pci_init();
 	acpi_init();
 	has_apic = 1;
@@ -348,32 +443,26 @@ void kernel_main(struct multiboot_info *mb_info)
 	}
 	pit_init();
 	rtc_init();
-	com_init();
 	ps2_init();
 	ide_init();
+	if (has_apic)
+		start_ap();
+	*(uint32_t*)(0xFFFFF000) = 0; /* remove identity paging at 0x00000000 */
 	sched_init();
 	{
+		char name[64];
+		uint32_t cpuid = curcpu();
+		snprintf(name, sizeof(name), "idle%" PRIu32, cpuid);
 		const char *argv[] = {"idle", NULL};
 		const char *envp[] = {NULL};
-		idle_thread = kproc_create("idle", idle_loop, argv, envp);
-		idle_thread->pri = 255;
-		idle_proc = idle_thread->proc;
-		sched_add(idle_thread);
+		idlethread = kproc_create(name, idle_loop, argv, envp);
+		idlethread->pri = 255;
+		CPUMASK_CLEAR(&idlethread->affinity);
+		CPUMASK_SET(&idlethread->affinity, cpuid, 1);
+		sched_add(idlethread);
 	}
-	{
-		uint32_t size = mb_info->framebuffer_bpp / 8;
-		size *= mb_info->framebuffer_pitch;
-		size *= mb_info->framebuffer_height;
-		size_t map_size = size;
-		map_size += PAGE_SIZE - 1;
-		map_size -= map_size % PAGE_SIZE;
-		uint8_t *addr = vmap(mb_info->framebuffer_addr, map_size);
-		for (size_t i = 0; i < size; ++i)
-			addr[i] = i * 0XF;
-	}
-	idle_thread->state = THREAD_RUNNING;
-	curthread = idle_thread;
-	curproc = curthread->proc;
+	idlethread->state = THREAD_RUNNING;
+	curthread = idlethread;
 	struct thread *thread;
 	{
 		struct file *file;
@@ -396,6 +485,14 @@ void kernel_main(struct multiboot_info *mb_info)
 	panic("post idle loop\n");
 
 #if 0
+	uint8_t buf[512];
+	ide_read_sectors(0, 1, 0, (uint8_t*)buf);
+	for (size_t i = 0; i < 512; ++i)
+		printf("%02x, ", buf[i]);
+	printf("\n");
+#endif
+
+#if 0
 	while (1)
 	{
 		struct timespec pit_ts;
@@ -408,13 +505,6 @@ void kernel_main(struct multiboot_info *mb_info)
 	}
 #endif
 
-#if 0
-	uint8_t buf[512];
-	ide_read_sectors(0, 1, 0, (uint8_t*)buf);
-	for (size_t i = 0; i < 512; ++i)
-		printf("%02x, ", buf[i]);
-	printf("\n");
-#endif
 }
 
 void x86_panic(uint32_t *esp, const char *file, const char *line, const char *fn, const char *fmt, ...)
@@ -424,9 +514,9 @@ void x86_panic(uint32_t *esp, const char *file, const char *line, const char *fn
 	va_start(va_arg, fmt);
 	vprintf(fmt, va_arg);
 	printf("%s@%s:%s\n", fn, file, line);
-	printf("EAX: %08lx EBX: %08lx ECX: %08lx EDX: %08lx\n", esp[8], esp[5], esp[7], esp[6]);
-	printf("ESI: %08lx EDI: %08lx ESP: %08lx EBP: %08lx\n", esp[2], esp[1], esp[4], esp[3]);
-	printf("EIP: %08lx\n", esp[0]);
+	printf("EAX: %08" PRIx32 " EBX: %08" PRIx32 " ECX: %08" PRIx32 " EDX: %08" PRIx32 "\n", esp[8], esp[5], esp[7], esp[6]);
+	printf("ESI: %08" PRIx32 " EDI: %08" PRIx32 " ESP: %08" PRIx32 " EBP: %08" PRIx32 "\n", esp[2], esp[1], esp[4], esp[3]);
+	printf("EIP: %08" PRIx32 "\n", esp[0]);
 
 #if 0
 	int i = 0;
@@ -471,37 +561,44 @@ void isa_eoi(enum isa_irq_id id)
 
 static void init_trapframe(struct thread *thread)
 {
-	thread->trapframe.eax = 0;
-	thread->trapframe.ebx = 0;
-	thread->trapframe.ecx = 0;
-	thread->trapframe.edx = 0;
-	thread->trapframe.esi = 0;
-	thread->trapframe.edi = 0;
-	thread->trapframe.esp = (uint32_t)&thread->stack[thread->stack_size];
-	thread->trapframe.ebp = (uint32_t)&thread->stack[thread->stack_size];
-	thread->trapframe.eip = (uint32_t)thread->proc->entrypoint;
+	thread->tf.eax = 0;
+	thread->tf.ebx = 0;
+	thread->tf.ecx = 0;
+	thread->tf.edx = 0;
+	thread->tf.esi = 0;
+	thread->tf.edi = 0;
+	thread->tf.esp = (uint32_t)&thread->stack[thread->stack_size];
+	thread->tf.ebp = (uint32_t)&thread->stack[thread->stack_size];
+	thread->tf.eip = (uint32_t)thread->proc->entrypoint;
 }
 
 void init_trapframe_kern(struct thread *thread)
 {
 	init_trapframe(thread);
-	thread->trapframe.cs = 0x08;
-	thread->trapframe.ds = 0x10;
-	thread->trapframe.es = 0x10;
-	thread->trapframe.fs = 0x10;
-	thread->trapframe.gs = 0x10;
-	thread->trapframe.ss = 0x10;
-	thread->trapframe.ef = getef() | (1 << 9); /* IF */
+	thread->tf.cs = 0x08;
+	thread->tf.ds = 0x10;
+	thread->tf.es = 0x10;
+	thread->tf.fs = 0x10;
+	thread->tf.gs = 0x10;
+	thread->tf.ss = 0x10;
+	thread->tf.ef = getef() | (1 << 9); /* IF */
 }
 
 void init_trapframe_user(struct thread *thread)
 {
 	init_trapframe(thread);
-	thread->trapframe.cs = 0x1B;
-	thread->trapframe.ds = 0x23;
-	thread->trapframe.es = 0x23;
-	thread->trapframe.fs = 0x23;
-	thread->trapframe.gs = 0x23;
-	thread->trapframe.ss = 0x23;
-	thread->trapframe.ef = getef() | (1 << 9); /* IF */
+	thread->tf.cs = 0x1B;
+	thread->tf.ds = 0x23;
+	thread->tf.es = 0x23;
+	thread->tf.fs = 0x23;
+	thread->tf.gs = 0x23;
+	thread->tf.ss = 0x23;
+	thread->tf.ef = getef() | (1 << 9) | (3 << 12); /* IF, CPL=3 */
+}
+
+uint32_t curcpu(void)
+{
+	uint32_t eax, ebx, ecx, edx;
+	__cpuid(1, eax, ebx, ecx, edx);
+	return ebx >> 24;
 }

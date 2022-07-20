@@ -60,11 +60,13 @@ static const struct fs_node_op g_reg_op =
 
 static int reg_read(struct file *file, void *data, size_t count);
 static off_t reg_seek(struct file *file, off_t off, int whence);
+static int reg_mmap(struct file *file, struct vmm_ctx *vmm_ctx, void *addr, off_t off, size_t len);
 
 static const struct file_op g_reg_fop =
 {
 	.read = reg_read,
 	.seek = reg_seek,
+	.mmap = reg_mmap,
 };
 
 struct ramfs_node
@@ -92,7 +94,9 @@ static size_t g_ino;
 static int reg_read(struct file *file, void *data, size_t count)
 {
 	struct ramfs_reg *reg = (struct ramfs_reg*)file->node;
-	if (file->off > reg->size)
+	if (file->off < 0)
+		return 0;
+	if ((size_t)file->off > reg->size)
 		return 0;
 	size_t rem = reg->size - file->off;
 	if (count > rem)
@@ -125,6 +129,26 @@ static off_t reg_seek(struct file *file, off_t off, int whence)
 		default:
 			return -EINVAL;
 	}
+}
+
+static int reg_mmap(struct file *file, struct vmm_ctx *vmm_ctx, void *addr, off_t off, size_t len)
+{
+	if (off < 0)
+		return EINVAL;
+	struct ramfs_reg *reg = (struct ramfs_reg*)file->node;
+	void *kaddr = vmap_user(vmm_ctx, addr, len);
+	if (!kaddr)
+		return ENOMEM;
+	size_t cpy_len;
+	if ((size_t)off >= reg->size)
+		cpy_len = 0;
+	else if (reg->size - off < len)
+		cpy_len = reg->size - off;
+	else
+		cpy_len = len;
+	memcpy(kaddr, &reg->data[off], cpy_len);
+	vunmap(kaddr, len);
+	return 0;
 }
 
 static int dir_lookup(struct fs_node *node, const char *name, uint32_t namelen, struct fs_node **child)
@@ -166,7 +190,7 @@ static int dir_readdir(struct fs_node *node, struct fs_readdir_ctx *ctx)
 	struct ramfs_dir *dir = (struct ramfs_dir*)node;
 	LIST_FOREACH(tmp, &dir->childs, chain)
 	{
-		if (i == ctx->off)
+		if (i == (size_t)ctx->off)
 		{
 			struct ramfs_node *dnode = tmp;
 			res = ctx->fn(ctx, dnode->name, strlen(dnode->name), i, dnode->node.ino, dnode->node.mode >> 12);

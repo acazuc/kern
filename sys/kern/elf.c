@@ -1,4 +1,5 @@
 #include <sys/file.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -78,7 +79,7 @@ static void handle_dt_rel(struct elf_relro_ctx *ctx, const Elf32_Dyn *rel, const
 				break;
 			}
 			default:
-				panic("unhandled reloc type: %lx\n", ELF32_R_TYPE(r->r_info));
+				panic("unhandled reloc type: %" PRIx32 "\n", ELF32_R_TYPE(r->r_info));
 				break;
 		}
 	}
@@ -141,7 +142,7 @@ static void handle_relro(struct vmm_ctx *vmm_ctx, const uint8_t *data, size_t ba
 				/* XXX */
 				break;
 			default:
-				panic("unhandled dyn tag %lx\n", dyn->d_tag);
+				panic("unhandled dyn tag %" PRIx32 "\n", dyn->d_tag);
 				break;
 		}
 	}
@@ -173,7 +174,7 @@ enditer:
 				panic("unsupported DT_RELA\n");
 				break;
 			default:
-				panic("invalid pltrel type: %ld\n", pltrel->d_un.d_val);
+				panic("invalid pltrel type: %" PRId32 "\n", pltrel->d_un.d_val);
 		}
 	}
 }

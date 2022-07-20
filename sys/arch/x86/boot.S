@@ -21,6 +21,7 @@
 .long MULTIBOOT_VIDEODEPTH
 
 .section .multiboot.bss, "aw", @nobits
+.global dir_page
 dir_page:
 .skip 4096
 kern_tbl:

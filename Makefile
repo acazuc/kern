@@ -25,6 +25,7 @@ SRC_NAME = arch/x86/boot.S \
            arch/x86/isr.c \
            arch/x86/mem.c \
            arch/x86/sys.c \
+           arch/x86/mp.s \
            dev/pic/pic.c \
            dev/vga/txt.c \
            dev/vga/rgb.c \
@@ -127,7 +128,7 @@ run: $(BIN_NAME) $(DISK_FILE)
 	-device qemu-xhci,id=xhci \
 	-device usb-ehci,id=ehci \
 	-nic user,model=e1000 \
-	-kernel $(BIN_NAME)
+	-kernel $(BIN_NAME) -d int
 
 runiso: $(ISO_NAME) $(DIKS_FILE)
 	@qemu-system-i386 \

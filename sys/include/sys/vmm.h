@@ -32,9 +32,19 @@ struct vmm_region
 
 struct vmm_ctx
 {
-	uint32_t dir[1024]; /* must be at the top for page alignment */
+	uint32_t dir[1024]; /* XXX move to arch */ /* must be at the top for page alignment */
 	uint32_t dir_paddr;
 	struct vmm_region region;
+#if 0
+	void *stack_bot;
+	void *stack_top;
+	size_t stack_size;
+	void *data_bot;
+	void *data_top;
+	size_t data_size;
+	void *heap_bot;
+	void *heap_top;
+#endif
 };
 
 #endif

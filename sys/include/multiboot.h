@@ -91,10 +91,10 @@
 
 #ifndef ASM_FILE
 
-typedef unsigned char           multiboot_uint8_t;
-typedef unsigned short          multiboot_uint16_t;
-typedef unsigned int            multiboot_uint32_t;
-typedef unsigned long long      multiboot_uint64_t;
+typedef uint8_t multiboot_uint8_t;
+typedef uint16_t multiboot_uint16_t;
+typedef uint32_t multiboot_uint32_t;
+typedef uint64_t multiboot_uint64_t;
 
 struct multiboot_header
 {
@@ -272,13 +272,13 @@ struct multiboot_apm_info
 /* Drive info. */
 struct multiboot_drive_info
 {
-	uint32_t size;
-	uint8_t number;
-	uint8_t mode;
-	uint16_t cylinders;
-	uint8_t heads;
-	uint8_t sectors;
-	uint16_t ports[];
+	multiboot_uint32_t size;
+	multiboot_uint8_t number;
+	multiboot_uint8_t mode;
+	multiboot_uint16_t cylinders;
+	multiboot_uint8_t heads;
+	multiboot_uint8_t sectors;
+	multiboot_uint16_t ports[];
 };
 typedef struct multiboot_drive_info multiboot_drive_info_t;
 

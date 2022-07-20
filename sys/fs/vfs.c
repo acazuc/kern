@@ -4,6 +4,7 @@
 
 #include <sys/proc.h>
 #include <sys/stat.h>
+#include <sys/pcpu.h>
 #include <string.h>
 #include <errno.h>
 
@@ -24,8 +25,8 @@ int vfs_getnode(struct fs_node *dir, const char *path, struct fs_node **node)
 	if (!dir)
 	{
 		if (*path == '/')
-			return vfs_getnode(curproc->root, path + 1, node);
-		return vfs_getnode(curproc->cwd, path, node);
+			return vfs_getnode(curthread->proc->root, path + 1, node);
+		return vfs_getnode(curthread->proc->cwd, path, node);
 	}
 	if (!*path)
 	{
@@ -38,7 +39,7 @@ int vfs_getnode(struct fs_node *dir, const char *path, struct fs_node **node)
 		return 0;
 	}
 	if (*path == '/')
-		return vfs_getnode(curproc->root, path + 1, node);
+		return vfs_getnode(curthread->proc->root, path + 1, node);
 	if (dir->mount)
 		dir = dir->mount->root;
 	if (!S_ISDIR(dir->mode))

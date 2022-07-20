@@ -23,6 +23,8 @@ void *vmap_user(struct vmm_ctx *ctx, void *ptr, size_t bytes);
 void vunmap(void *ptr, size_t bytes);
 void vmm_setctx(const struct vmm_ctx *ctx);
 
+uint32_t curcpu(void);
+
 void init_trapframe_kern(struct thread *thread);
 void init_trapframe_user(struct thread *thread);
 
