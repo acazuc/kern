@@ -445,8 +445,8 @@ void kernel_main(struct multiboot_info *mb_info)
 	rtc_init();
 	ps2_init();
 	ide_init();
-	if (has_apic)
-		start_ap();
+	//if (has_apic)
+	//	start_ap();
 	*(uint32_t*)(0xFFFFF000) = 0; /* remove identity paging at 0x00000000 */
 	sched_init();
 	{
@@ -462,24 +462,24 @@ void kernel_main(struct multiboot_info *mb_info)
 		sched_add(idlethread);
 	}
 	idlethread->state = THREAD_RUNNING;
-	curthread = idlethread;
 	struct thread *thread;
 	{
 		struct file *file;
 		struct fs_node *elf;
-		assert(!vfs_getnode(NULL, "/bin/init", &elf), "can't open /bin/init");
+		assert(!vfs_getnode(NULL, "/bin/sh", &elf), "can't open /bin/sh");
 		file = malloc(sizeof(*file), 0);
 		file->op = elf->fop;
 		file->node = elf;
 		file->off = 0;
 		file->refcount = 1;
-		const char *argv[] = {"/bin/init", NULL};
+		const char *argv[] = {"/bin/sh", NULL};
 		const char *envp[] = {NULL};
-		thread = uproc_create_elf("init", file, argv, envp);
+		thread = uproc_create_elf("sh", file, argv, envp);
 		sched_add(thread);
 		file_decref(file);
 	}
 	/* added after init to avoid buggy scheduling on page fault interrupt */
+	sched_run(idlethread);
 	sched_run(thread);
 	idle_loop();
 	panic("post idle loop\n");

@@ -25,8 +25,8 @@ int vfs_getnode(struct fs_node *dir, const char *path, struct fs_node **node)
 	if (!dir)
 	{
 		if (*path == '/')
-			return vfs_getnode(curthread->proc->root, path + 1, node);
-		return vfs_getnode(curthread->proc->cwd, path, node);
+			return vfs_getnode(curthread ? curthread->proc->root : g_vfs_root, path + 1, node);
+		return vfs_getnode(curthread ? curthread->proc->cwd : g_vfs_root, path, node);
 	}
 	if (!*path)
 	{

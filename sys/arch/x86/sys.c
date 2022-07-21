@@ -2,11 +2,13 @@
 #include "dev/pit/pit.h"
 
 #include <sys/syscall.h>
+#include <sys/sched.h>
 #include <sys/proc.h>
 #include <sys/file.h>
 #include <sys/proc.h>
 #include <sys/stat.h>
 #include <sys/pcpu.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -30,9 +32,10 @@ static int verify_userstr(const char *str)
 
 static int sys_exit(int code)
 {
-	//proc_delete(curthread->proc);
-	printf("exit\n");
-	curthread = idlethread;
+	struct thread *oldthread = curthread;
+	sched_switch(idlethread);
+	oldthread->state = THREAD_ZOMBIE;
+	/* XXX mark zombie, delete proc ? */
 	return curthread->tf.eax; /* hack: return current eax value to not change anything */
 }
 
@@ -505,17 +508,14 @@ static void *sys_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t
 	if (!file->op || !file->op->mmap)
 		return (void*)-EINVAL; /* XXX */
 	/* XXX use flags, prot, addr */
-	if (!addr)
+	void *kaddr = vmalloc_user(curthread->proc->vmm_ctx, addr, len);
+	if (!kaddr)
 	{
-		addr = vmalloc_user(curthread->proc->vmm_ctx, NULL, len);
-		if (!addr)
+		kaddr = vmalloc_user(curthread->proc->vmm_ctx, NULL, len);
+		if (!kaddr)
 			return (void*)-ENOMEM;
 	}
-	else
-	{
-		return (void*)-EINVAL; /* XXX */
-	}
-	int ret = file->op->mmap(file, curthread->proc->vmm_ctx, addr, off, len);
+	int ret = file->op->mmap(file, curthread->proc->vmm_ctx, kaddr, off, len);
 	if (ret)
 		return (void*)-ret;
 	return addr;

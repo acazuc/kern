@@ -21,6 +21,7 @@ isr_common:
 	push eax
 
 	;if ring has been crossed, load ss & esp from int stack
+	;otherwise, keep already-present values
 	mov eax, [esp + 15 * 4]
 	test eax, 0x3000
 	jz .no_ring_cross_pre
@@ -46,14 +47,18 @@ isr_common:
 	add esp, 2 * 4
 
 	;restore ctx
+	mov eax, [esp + 15 * 4]
+	test eax, 0x3000
+	jz .no_ring_cross_post
+
+	;don't recreate iret ctx here if
+	;we go to a privileged process
+	;it will be created just before iret
+	mov [esp + 21 * 4], eax ;ef
 	mov eax, [esp + 8 * 4]
 	mov [esp + 19 * 4], eax ;eip
 	mov eax, [esp + 9 * 4]
 	mov [esp + 20 * 4], eax ;cs
-	mov eax, [esp + 15 * 4]
-	mov [esp + 21 * 4], eax ;ef
-	test eax, 0x3000
-	jz .no_ring_cross_post
 	mov eax, [esp + 14 * 4]
 	mov [esp + 23 * 4], eax ;ss
 	mov eax, [esp + 6 * 4]
@@ -78,7 +83,23 @@ isr_common:
 	test eax, 0x3000
 	jnz .ring_cross_end
 
-	;set esp & ss if going to ring 0
+	;when no ring is crossed at output
+	;we must regenerate the iret frame
+	;entirely on the kernel stack
+	;because it won't exist if interrupt
+	;was fired in userland (stack would
+	;be in the tss stack, not the effective
+	;kernel proc stack
+	push ebx
+	mov eax, [esp - 6 * 4] ;esp of thread
+	sub eax, 3 * 4
+	mov ebx, [esp - 4 * 4]
+	mov [eax + 0 * 4], ebx ;eip
+	mov ebx, [esp - 3 * 4]
+	mov [eax + 1 * 4], ebx ;cs
+	mov ebx, [esp + 3 * 4]
+	mov [eax + 2 * 4], ebx ;ef
+	pop ebx
 	pop eax
 	mov esp, [esp - 8 * 4]
 	sub esp, 3 * 4

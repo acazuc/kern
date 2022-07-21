@@ -128,7 +128,7 @@ run: $(BIN_NAME) $(DISK_FILE)
 	-device qemu-xhci,id=xhci \
 	-device usb-ehci,id=ehci \
 	-nic user,model=e1000 \
-	-kernel $(BIN_NAME) -d int
+	-kernel $(BIN_NAME)
 
 runiso: $(ISO_NAME) $(DIKS_FILE)
 	@qemu-system-i386 \

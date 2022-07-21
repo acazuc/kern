@@ -8,5 +8,6 @@ void sched_add(struct thread *thread);
 void sched_rm(struct thread *thread);
 void sched_run(struct thread *thread);
 void sched_tick(void);
+void sched_switch(struct thread *thread);
 
 #endif

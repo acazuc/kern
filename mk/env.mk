@@ -13,7 +13,7 @@ ASMFLAGS = -f elf32
 CFLAGS = -std=c99 \
          -m32 \
          -ffreestanding \
-         -O0 \
+         -O2 \
          -Wall \
          -Wextra \
          -fno-omit-frame-pointer \

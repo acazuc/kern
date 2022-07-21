@@ -88,6 +88,9 @@ static void handle_general_protection_fault(const struct int_ctx *ctx)
 static void handle_page_fault(const struct int_ctx *ctx)
 {
 	uint32_t page_addr = getcr2();
+#if 1
+	printf("page fault addr 0x%08" PRIx32 ": 0x%08" PRIx32 " @ 0x%08" PRIx32 " (%" PRIx32 ")\n", page_addr, ctx->err, ctx->trapframe.eip, ctx->trapframe.esp);
+#endif
 	if (!(ctx->err & 1))
 	{
 		paging_alloc(page_addr);
@@ -143,6 +146,9 @@ static void handle_security_exception(const struct int_ctx *ctx)
 
 static void handle_syscall(const struct int_ctx *ctx)
 {
+#if 0
+	printf("syscall %" PRId32 " @ 0x%08" PRIx32 " (%" PRIx32 ")\n", ctx->trapframe.eax, ctx->trapframe.eip, ctx->trapframe.esp);
+#endif
 	call_sys(ctx);
 }
 
@@ -154,7 +160,6 @@ void handle_interrupt(uint32_t id, struct int_ctx *ctx)
 	 * exceptions can be thrown while being in kernel mode
 	 * and we don't want to bother with nested interrupt trapframe handling
 	 */
-	struct thread *old_thread = curthread;
 	if (id >= 0x20 && curthread)
 		memcpy(&curthread->tf, &ctx->trapframe, sizeof(ctx->trapframe));
 	if (id >= 256)
@@ -162,13 +167,11 @@ void handle_interrupt(uint32_t id, struct int_ctx *ctx)
 	if (!g_interrupt_handlers[id])
 		panic("unhandled interrupt 0x%02" PRIx32 " @ 0x%08" PRIx32 " (err: 0x%08" PRIx32 ")\n", id, ctx->trapframe.eip, ctx->err);
 	g_interrupt_handlers[id](ctx);
-	if (id >= 0x20 && curthread)
+	if (id >= 0x20)
 	{
 		sched_tick();
 		memcpy(&ctx->trapframe, &curthread->tf, sizeof(ctx->trapframe));
 		tss_set_ptr(&curthread->int_stack[curthread->int_stack_size]);
-		if (curthread != old_thread)
-			printf("ret to %s at %" PRIx32 " (%" PRIx32 ") (%" PRIx32 ")\n", curthread->proc->name, ctx->trapframe.eip, ctx->trapframe.ef, ctx->trapframe.esp);
 	}
 }
 

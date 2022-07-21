@@ -1,5 +1,6 @@
 #include <sys/proc.h>
 #include <sys/pcpu.h>
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdio.h>
 
@@ -44,16 +45,19 @@ void sched_rm(struct thread *thread)
 	TAILQ_REMOVE(&g_threads, thread, sched_chain);
 }
 
-static void change_thread(struct thread *thread)
+void sched_switch(struct thread *thread)
 {
 	if (thread == curthread)
 		return;
-#if 0
-	printf("changing thread from %p (%s; %#" PRIx32 ") to %p (%s; %#" PRIx32 ")\n", curthread, curthread->proc->name, curthread->trapframe.eip, thread, thread->proc->name, thread->trapframe.eip);
+#if 1
+	printf("changing thread from %p (%s; %#" PRIx32 ") to %p (%s; %#" PRIx32 ")\n", curthread, curthread ? curthread->proc->name : "", curthread ? curthread->tf.eip : 0, thread, thread->proc->name, thread->tf.eip);
 #endif
-	if (curthread->state == THREAD_RUNNING)
-		sched_run(curthread);
-	curthread->state = THREAD_PAUSED;
+	if (curthread)
+	{
+		if (curthread->state == THREAD_RUNNING)
+			sched_run(curthread);
+		curthread->state = THREAD_PAUSED;
+	}
 	curthread = thread;
 	curthread->proc = thread->proc;
 	curthread->state = THREAD_RUNNING;
@@ -75,12 +79,12 @@ static struct thread *find_thread(void)
 void sched_tick(void)
 {
 	/* XXX: do a scheduling tick only on time interval */
-	if (curthread->state == THREAD_PAUSED)
+	if (curthread && curthread->state == THREAD_PAUSED)
 	{
 		struct thread *thread = find_thread();
 		if (thread)
 		{
-			change_thread(thread);
+			sched_switch(thread);
 			return;
 		}
 		panic("can't find paused thread to run\n");
@@ -91,11 +95,11 @@ void sched_tick(void)
 	{
 		if (thread == curthread) /* XXX: shouldn't happen */
 			continue;
-		if (thread->pri > curthread->pri)
+		if (curthread && thread->pri > curthread->pri)
 			return;
 		if (thread->state == THREAD_PAUSED)
 			break;
 	}
 	if (thread && thread->state == THREAD_PAUSED)
-		change_thread(thread);
+		sched_switch(thread);
 }

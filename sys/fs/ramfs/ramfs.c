@@ -5,9 +5,11 @@
 #include <sys/queue.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <inttypes.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include <errno.h>
 
 static int dir_lookup(struct fs_node *node, const char *name, uint32_t namelen, struct fs_node **child);
@@ -96,7 +98,7 @@ static int reg_read(struct file *file, void *data, size_t count)
 	struct ramfs_reg *reg = (struct ramfs_reg*)file->node;
 	if (file->off < 0)
 		return 0;
-	if ((size_t)file->off > reg->size)
+	if ((size_t)file->off >= reg->size)
 		return 0;
 	size_t rem = reg->size - file->off;
 	if (count > rem)

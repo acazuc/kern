@@ -217,7 +217,7 @@ static void *realloc_large(struct page *lst, void *ptr, size_t size, uint32_t fl
 		MALLOC_UNLOCK();
 		return NULL;
 	}
-	len = lst->data_size - sizeof(*lst);
+	len = lst->data_size;
 	if (size < len)
 		len = size;
 	memcpy(addr, ptr, len);

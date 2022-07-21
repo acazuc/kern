@@ -10,7 +10,7 @@
 #include "arch/arch.h"
 #include "fs/vfs.h"
 
-struct elf_relro_ctx
+struct elf_dynamic_ctx
 {
 	struct vmm_ctx *vmm_ctx;
 	const uint8_t *data;
@@ -32,12 +32,13 @@ static const Elf32_Dyn *get_dyn(const Elf32_Phdr *phdr, const uint8_t *data, Elf
 	return NULL;
 }
 
-static void handle_dt_rel(struct elf_relro_ctx *ctx, const Elf32_Dyn *rel, const Elf32_Dyn *relsz, size_t size)
+static void handle_dt_rel(struct elf_dynamic_ctx *ctx, const Elf32_Dyn *rel, const Elf32_Dyn *relsz, size_t size)
 {
 	for (size_t i = 0; i < relsz->d_un.d_val; i += size)
 	{
 		const Elf32_Rel *r = (const Elf32_Rel*)&ctx->data[rel->d_un.d_ptr + i]; /* XXX test overflow */
 		uint32_t reladdr = ctx->base_addr + r->r_offset;
+		//printf("relocate at %" PRIx32 "\n", reladdr);
 		uint32_t addr = reladdr - reladdr % PAGE_SIZE;
 		size_t size = 8 + reladdr;
 		if (size % PAGE_SIZE < reladdr % PAGE_SIZE)
@@ -85,13 +86,13 @@ static void handle_dt_rel(struct elf_relro_ctx *ctx, const Elf32_Dyn *rel, const
 	}
 }
 
-static void handle_relro(struct vmm_ctx *vmm_ctx, const uint8_t *data, size_t base_addr, const Elf32_Phdr *phdr, int is_interp)
+static void handle_dynamic(struct vmm_ctx *vmm_ctx, const uint8_t *data, size_t base_addr, const Elf32_Phdr *phdr, int is_interp)
 {
 	/* XXX: one DT_HASH */
 	/* XXX: one DT_RELA */
 	/* XXX: one DT_RELASZ if DT_RELA */
 	/* XXX: one DT_RELAENT if DT_RELA */
-	struct elf_relro_ctx ctx;
+	struct elf_dynamic_ctx ctx;
 	ctx.vmm_ctx = vmm_ctx;
 	ctx.data = data;
 	ctx.base_addr = base_addr;
@@ -186,13 +187,13 @@ static int createctx(struct file *file, struct vmm_ctx *vmm_ctx, void **entry, i
 	int r;
 	do
 	{
-		uint8_t *tmp = realloc(data, len + 4096, M_ZERO);
+		uint8_t *tmp = realloc(data, len + 4096, 0);
 		assert(tmp, "can't allocate elf file data\n");
 		data = tmp;
 		r = file->op->read(file, data + len, 4096);
 		assert(r >= 0, "failed to read from elf file\n");
 		len += r;
-	} while (r == 4096);
+	} while (r > 0);
 	assert(data, "no data has been read\n");
 	assert(len >= sizeof(Elf32_Ehdr), "file too short (no header)\n");
 	Elf32_Ehdr *hdr = (Elf32_Ehdr*)data;
@@ -275,9 +276,9 @@ static int createctx(struct file *file, struct vmm_ctx *vmm_ctx, void **entry, i
 				vunmap(dst, size);
 				break;
 			}
-			case PT_GNU_RELRO:
+			case PT_DYNAMIC:
 			{
-				handle_relro(vmm_ctx, data, base_addr, phdr, is_interp);
+				handle_dynamic(vmm_ctx, data, base_addr, phdr, is_interp);
 				break;
 			}
 		}
