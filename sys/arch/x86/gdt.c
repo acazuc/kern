@@ -54,8 +54,8 @@ static struct gdtr g_gdtr;
 static const struct gdt_entry g_gdt_entries[] =
 {
 	{.base = 0               , .limit = 0            , .type = 0x00, .flags = 0x40}, /* NULL */
-	{.base = 0               , .limit = 0xFFFFFFFF   , .type = 0x9A, .flags = 0x40}, /* code */
-	{.base = 0               , .limit = 0xFFFFFFFF   , .type = 0x92, .flags = 0x40}, /* data */
+	{.base = 0               , .limit = 0xFFFFFFFF   , .type = 0x9A, .flags = 0x40}, /* kern code */
+	{.base = 0               , .limit = 0xFFFFFFFF   , .type = 0x92, .flags = 0x40}, /* kern data */
 	{.base = 0               , .limit = 0xFFFFFFFF   , .type = 0xFA, .flags = 0x40}, /* user code */
 	{.base = 0               , .limit = 0xFFFFFFFF   , .type = 0xF2, .flags = 0x40}, /* user data */
 	{.base = (uint32_t)&g_tss, .limit = sizeof(g_tss), .type = 0xE9, .flags = 0x00}, /* tss */

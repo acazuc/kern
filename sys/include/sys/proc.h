@@ -1,10 +1,10 @@
 #ifndef SYS_PROC_H
 #define SYS_PROC_H
 
-#include "arch/arch.h"
 #include <sys/queue.h>
 #include <sys/types.h>
 #include <sys/pcpu.h>
+#include <arch.h>
 
 struct vmm_ctx;
 struct fs_node;
@@ -58,6 +58,9 @@ struct thread
 	TAILQ_ENTRY(thread) thread_chain;
 	TAILQ_ENTRY(thread) queue_chain;
 };
+
+void init_trapframe_kern(struct thread *thread);
+void init_trapframe_user(struct thread *thread);
 
 struct thread *uproc_create(const char *name, void *entry, const char * const *av, const char * const *ev);
 struct thread *kproc_create(const char *name, void *entry, const char * const *av, const char * const *ev);

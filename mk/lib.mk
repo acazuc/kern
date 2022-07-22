@@ -12,6 +12,16 @@ OBJ_PATH = obj
 
 OBJ = $(addprefix $(OBJ_PATH)/, $(OBJ_NAME))
 
+LIBS_DIR = $(addprefix -L ../../lib/, $(LIB))
+
+LIBS_LINK1 = $(addprefix -l:, $(LIB))
+
+LIBS_LINK = $(addsuffix .so, $(LIBS_LINK1))
+
+LIBS_INC1 = $(addsuffix /include, $(LIB))
+
+LIBS_INC = $(addprefix -I ../../lib/, $(LIBS_INC1))
+
 all: $(BIN)
 
 $(OBJ_PATH)/%.c.o: $(SRC_PATH)/%.c

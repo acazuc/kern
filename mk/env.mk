@@ -10,12 +10,17 @@ ASFLAGS = --32
 
 ASMFLAGS = -f elf32
 
+ISYSTEM = $(addprefix -isystem , $(INCLUDE_SYSDIR))
+
+IDQUOTE = $(addprefix -iquote , $(SRC_PATH))
+
 CFLAGS = -std=c99 \
          -m32 \
          -ffreestanding \
          -O2 \
          -Wall \
          -Wextra \
+         -Wshadow \
          -fno-omit-frame-pointer \
          -mtune=generic \
          -march=i686 \
@@ -24,10 +29,10 @@ CFLAGS = -std=c99 \
          -fcf-protection=none \
          -g \
          -nostdinc \
-         -isystem $(INCLUDE_SYSDIR) \
-         -iquote $(SRC_PATH)
+         $(ISYSTEM) \
+         $(IDQUOTE) \
 
 LDFLAGS = -nostdlib \
           -nodefaultlibs \
           -m32 \
-          -nostartfiles
+          -nostartfiles \

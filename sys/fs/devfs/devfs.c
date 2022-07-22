@@ -1,15 +1,30 @@
-#include "fs/vfs.h"
 #include "devfs.h"
 
-#include "arch/arch.h"
 #include <sys/stat.h>
 #include <sys/file.h>
+#include <sys/std.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 #include <errno.h>
+#include <arch.h>
 
 static int root_lookup(struct fs_node *node, const char *name, uint32_t namelen, struct fs_node **child);
 static int root_readdir(struct fs_node *node, struct fs_readdir_ctx *ctx);
+
+struct devfs
+{
+	struct devfs_node **nodes;
+	size_t nodes_nb;
+	size_t ino;
+	struct fs_cdev *node_mem;
+	struct fs_cdev *node_null;
+	struct fs_cdev *node_zero;
+	struct fs_cdev *node_random;
+	struct fs_cdev *node_urandom;
+};
+
+static struct devfs g_devfs;
 
 static const struct fs_type g_type =
 {
@@ -38,7 +53,7 @@ static const struct fs_node_op g_root_op =
 	.readdir = root_readdir,
 };
 
-static struct fs_node_op g_node_op =
+static const struct fs_node_op g_node_op =
 {
 };
 
@@ -48,23 +63,13 @@ struct devfs_node
 	char *name;
 };
 
-static struct devfs_node **g_nodes = NULL;
-static size_t g_nodes_nb = 0;
-static size_t g_ino;
-
-static struct fs_cdev *g_node_mem;
-static struct fs_cdev *g_node_null;
-static struct fs_cdev *g_node_zero;
-static struct fs_cdev *g_node_random;
-static struct fs_cdev *g_node_urandom;
-
 static int root_lookup(struct fs_node *dir, const char *name, uint32_t namelen, struct fs_node **child)
 {
 	if (dir != g_sb.root)
 		return ENOENT;
-	for (size_t i = 0; i < g_nodes_nb; ++i)
+	for (size_t i = 0; i < g_devfs.nodes_nb; ++i)
 	{
-		struct devfs_node *node = g_nodes[i];
+		struct devfs_node *node = g_devfs.nodes[i];
 		if (!node)
 			continue;
 		if (!strncmp(node->name, name, namelen))
@@ -96,9 +101,9 @@ static int root_readdir(struct fs_node *node, struct fs_readdir_ctx *ctx)
 		written++;
 		ctx->off++;
 	}
-	for (size_t i = ctx->off - 2; i < g_nodes_nb; ++i)
+	for (size_t i = ctx->off - 2; i < g_devfs.nodes_nb; ++i)
 	{
-		struct devfs_node *dnode = g_nodes[i];
+		struct devfs_node *dnode = g_devfs.nodes[i];
 		res = ctx->fn(ctx, dnode->name, strlen(dnode->name), i + 2, dnode->node->ino, dnode->node->mode >> 12);
 		if (res)
 			return written;
@@ -194,13 +199,13 @@ static const struct file_op g_urandom_fop =
 
 static int find_ino(struct devfs_node *node)
 {
-	struct devfs_node **nodes = realloc(g_nodes, sizeof(*nodes) * (g_nodes_nb + 1), 0);
+	struct devfs_node **nodes = realloc(g_devfs.nodes, sizeof(*nodes) * (g_devfs.nodes_nb + 1), 0);
 	if (!nodes)
 		return ENOMEM;
-	g_nodes = nodes;
-	g_nodes[g_nodes_nb] = node;
-	g_nodes_nb++;
-	node->node->ino = g_nodes_nb;
+	g_devfs.nodes = nodes;
+	g_devfs.nodes[g_devfs.nodes_nb] = node;
+	g_devfs.nodes_nb++;
+	node->node->ino = g_devfs.nodes_nb;
 	return 0;
 }
 
@@ -247,7 +252,7 @@ int devfs_mkcdev(const char *name, uid_t uid, gid_t gid, mode_t mode, dev_t rdev
 	node->fop = file_op;
 	node->sb = &g_sb;
 	node->parent = g_sb.root;
-	node->ino = ++g_ino;
+	node->ino = ++g_devfs.ino;
 	node->uid = uid;
 	node->gid = gid;
 	node->mode = (mode & ~S_IFMT) | S_IFCHR;
@@ -275,17 +280,17 @@ struct fs_sb *devfs_init(struct fs_node *dir)
 	root->op = &g_root_op;
 	root->parent = dir;
 	root->sb = &g_sb;
-	root->ino = ++g_ino;
+	root->ino = ++g_devfs.ino;
 	root->uid = 0;
 	root->gid = 0;
 	root->mode = 0755 | S_IFDIR;
 	root->refcount = 1;
 	g_sb.root = root;
-	assert(!devfs_mkcdev("mem", 0, 0, 0400, makedev(1, 1), &g_mem_fop, &g_node_mem), "can't create /dev/mem");
-	assert(!devfs_mkcdev("null", 0, 0, 0666, makedev(1, 3), &g_null_fop, &g_node_null), "can't create /dev/null");
-	assert(!devfs_mkcdev("zero", 0, 0, 0666, makedev(1, 5), &g_zero_fop, &g_node_zero), "can't create /dev/zero");
-	assert(!devfs_mkcdev("random", 0, 0, 0666, makedev(1, 8), &g_random_fop, &g_node_random), "can't create /dev/random");
-	assert(!devfs_mkcdev("urandom", 0, 0, 0666, makedev(1, 9), &g_urandom_fop, &g_node_urandom), "can't create /dev/urandom");
+	assert(!devfs_mkcdev("mem", 0, 0, 0400, makedev(1, 1), &g_mem_fop, &g_devfs.node_mem), "can't create /dev/mem");
+	assert(!devfs_mkcdev("null", 0, 0, 0666, makedev(1, 3), &g_null_fop, &g_devfs.node_null), "can't create /dev/null");
+	assert(!devfs_mkcdev("zero", 0, 0, 0666, makedev(1, 5), &g_zero_fop, &g_devfs.node_zero), "can't create /dev/zero");
+	assert(!devfs_mkcdev("random", 0, 0, 0666, makedev(1, 8), &g_random_fop, &g_devfs.node_random), "can't create /dev/random");
+	assert(!devfs_mkcdev("urandom", 0, 0, 0666, makedev(1, 9), &g_urandom_fop, &g_devfs.node_urandom), "can't create /dev/urandom");
 	dir->mount = &g_sb;
 	return &g_sb;
 }

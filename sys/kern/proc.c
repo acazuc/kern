@@ -1,12 +1,14 @@
+#include <sys/sched.h>
 #include <sys/proc.h>
+#include <sys/file.h>
+#include <sys/vmm.h>
+#include <sys/std.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/sched.h>
-#include <sys/file.h>
+#include <assert.h>
 #include <stdio.h>
-
-#include "arch/x86/asm.h"
-#include "fs/vfs.h"
+#include <arch.h>
+#include <vfs.h>
 
 static pid_t g_pid;
 static pid_t g_tid;

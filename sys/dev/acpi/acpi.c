@@ -2,9 +2,11 @@
 #include "arch/x86/x86.h"
 
 #include <inttypes.h>
+#include <sys/vmm.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include <assert.h>
 #include <stdio.h>
 
 /*
@@ -230,8 +232,6 @@ struct hpet
  * one local apic per vcpu
  * one io apic per package ?
  *
- * XXX: start mp
- * XXX: reloc 8259 int to IO/APIC
  * XXX: symmetric IO mode
  */
 
@@ -353,10 +353,10 @@ static void handle_rsdp(const struct rsdp *rsdp)
 	if (rsdp->revision >= 2)
 	{
 		const struct rsdp2 *rsdp2 = (const struct rsdp2*)rsdp;
-		uint8_t checksum = 0;
+		uint8_t checksum2 = 0;
 		for (size_t i = 0; i < sizeof(*rsdp) + sizeof(*rsdp2); ++i)
-			checksum += ((const uint8_t*)rsdp)[i];
-		assert(!checksum, "invalid rsdp2 checksum: %02" PRIx8 "\n", checksum);
+			checksum2 += ((const uint8_t*)rsdp)[i];
+		assert(!checksum2, "invalid rsdp2 checksum: %02" PRIx8 "\n", checksum2);
 		rsdt_addr = rsdp2->xsdt;
 	}
 	else

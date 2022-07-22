@@ -1,7 +1,9 @@
 #ifndef SYS_PCPU_H
 #define SYS_PCPU_H
 
-#include "arch/arch.h"
+#include <stddef.h>
+#include <stdint.h>
+#include <arch.h>
 
 struct pcpu
 {
@@ -46,5 +48,7 @@ do \
 	else \
 		(m)->mask[CPUMASK_OFF(n)] &= ~CPUMASK_BIT(n); \
 } while (0)
+
+uint32_t curcpu(void);
 
 #endif

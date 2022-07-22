@@ -1,7 +1,7 @@
 #include "apic.h"
 #include "arch/x86/asm.h"
-#include "arch/arch.h"
 
+#include <sys/vmm.h>
 #include <stdio.h>
 
 /*

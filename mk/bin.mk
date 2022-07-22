@@ -20,14 +20,14 @@ LIBS_LINK = $(addsuffix .so, $(LIBS_LINK1))
 
 LIBS_INC1 = $(addsuffix /include, $(LIB))
 
-LIBS_INC = $(addprefix -I ../../, $(LIBS_INC1))
+LIBS_INC = $(addprefix -I ../../lib/, $(LIBS_INC1))
 
 all: $(BIN)
 
 $(OBJ_PATH)/%.c.o: $(SRC_PATH)/%.c
 	@mkdir -p $(dir $@)
 	@echo "CC $<"
-	@$(CC) $(CFLAGS) -c $< -o $@ $(LIBS_INC)
+	$(CC) $(CFLAGS) -c $< -o $@ $(LIBS_INC)
 
 $(OBJ_PATH)/%.s.o: $(SRC_PATH)/%.s
 	@mkdir -p $(dir $@)

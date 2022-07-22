@@ -1,10 +1,10 @@
-#include "arch/arch.h"
-
 #include <sys/queue.h>
+#include <sys/vmm.h>
 #include <sys/std.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <arch.h>
 
 /* XXX
  * allocation should be split between metadata and data
@@ -14,6 +14,7 @@
  *
  * maybe the metadata should be allocated in another zone than the data, allowing something
  * like multiple struct page inside a metadata page allocation
+ * it will allow better cache localization on page traversal
  */
 
 #define BLOCKS_SIZE ((BLOCKS_COUNT + BLOCK_BITS - 1) / BLOCK_BITS)
@@ -25,7 +26,7 @@
 
 enum block_type
 {
-	BLOCK_1,
+	BLOCK_1, /* XXX only at least 4 ? */
 	BLOCK_2,
 	BLOCK_4,
 	BLOCK_8,
@@ -210,7 +211,6 @@ static void *realloc_large(struct page *lst, void *ptr, size_t size, uint32_t fl
 	void *addr;
 	size_t len;
 
-	(void)flags;
 	addr = create_new_block(BLOCK_LARGE, size);
 	if (!addr)
 	{
@@ -220,6 +220,8 @@ static void *realloc_large(struct page *lst, void *ptr, size_t size, uint32_t fl
 	len = lst->data_size;
 	if (size < len)
 		len = size;
+	if (flags & M_ZERO)
+		memset((uint8_t*)addr + len, 0, size - len);
 	memcpy(addr, ptr, len);
 	TAILQ_REMOVE(&g_pages[lst->type], lst, chain);
 	vfree(lst, lst->page_size);
@@ -238,6 +240,8 @@ static void *realloc_blocky(struct page *lst, void *ptr, size_t size, uint32_t f
 	void *addr = malloc(size, flags);
 	if (!addr)
 		return NULL;
+	if (flags & M_ZERO)
+		memset((uint8_t*)addr + g_block_sizes[lst->type], 0, size - g_block_sizes[lst->type]);
 	memcpy(addr, ptr, g_block_sizes[lst->type]);
 	free(ptr);
 	return addr;
@@ -248,7 +252,6 @@ void *malloc(size_t size, uint32_t flags)
 	enum block_type type;
 	void *addr;
 
-	(void)flags;
 	if (!size)
 		return NULL;
 	type = get_block_type(size);
@@ -309,7 +312,6 @@ void free(void *ptr)
 
 void *realloc(void *ptr, size_t size, uint32_t flags)
 {
-	(void)flags;
 	if (!ptr)
 		return malloc(size, flags);
 	if (!size)

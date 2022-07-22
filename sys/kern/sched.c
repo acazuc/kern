@@ -1,8 +1,11 @@
 #include <sys/proc.h>
 #include <sys/pcpu.h>
 #include <inttypes.h>
+#include <sys/std.h>
+#include <sys/vmm.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <arch.h>
 
 static TAILQ_HEAD(, thread) g_threads; /* prio-ordered */
 static TAILQ_HEAD(, thread) g_queue; /* schedulable threads */
@@ -49,7 +52,7 @@ void sched_switch(struct thread *thread)
 {
 	if (thread == curthread)
 		return;
-#if 1
+#if 0
 	printf("changing thread from %p (%s; %#" PRIx32 ") to %p (%s; %#" PRIx32 ")\n", curthread, curthread ? curthread->proc->name : "", curthread ? curthread->tf.eip : 0, thread, thread->proc->name, thread->tf.eip);
 #endif
 	if (curthread)

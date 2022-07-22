@@ -1,5 +1,5 @@
-#include "fs/vfs.h"
 #include "dev/pit/pit.h"
+#include "x86.h"
 
 #include <sys/syscall.h>
 #include <sys/sched.h>
@@ -9,11 +9,13 @@
 #include <sys/stat.h>
 #include <sys/pcpu.h>
 #include <inttypes.h>
+#include <sys/vmm.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
 #include <time.h>
+#include <vfs.h>
 
 static int verify_userdata(const void *ptr, size_t count)
 {
@@ -451,18 +453,18 @@ static int sys_execve(const char *pathname, const char *const *argv, const char 
 		return -ret;
 	struct file file;
 	file.refcount = 1;
-	if (node->fop && node->fop->open)
+	file.op = node->fop;
+	file.node = node;
+	file.off = 0;
+	if (file.op && file.op->open)
 	{
-		ret = node->fop->open(&file, node);
+		ret = file.op->open(&file, node);
 		if (ret)
 		{
 			file_decref(&file);
 			return -ret;
 		}
 	}
-	file.op = node->fop;
-	file.node = node;
-	file.off = 0;
 	/* XXX better way to do this */
 	struct vmm_ctx *vmm_ctx = vmm_ctx_create();
 	if (!vmm_ctx)
@@ -471,7 +473,9 @@ static int sys_execve(const char *pathname, const char *const *argv, const char 
 		return -ENOMEM;
 	}
 	void *entry;
+	printf("creating elf ctx\n");
 	ret = elf_createctx(&file, vmm_ctx, &entry);
+	printf("created elf ctx\n");
 	if (ret)
 	{
 		file_decref(&file);
@@ -523,40 +527,40 @@ static void *sys_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t
 
 static int (*g_syscalls[])() =
 {
-	[SYS_EXIT]      = sys_exit,
-	[SYS_FORK]      = sys_fork,
-	[SYS_READ]      = sys_read,
-	[SYS_WRITE]     = sys_write,
-	[SYS_OPEN]      = sys_open,
-	[SYS_CLOSE]     = sys_close,
-	[SYS_TIME]      = sys_time,
-	[SYS_GETPID]    = sys_getpid,
-	[SYS_GETUID]    = sys_getuid,
-	[SYS_GETGID]    = sys_getgid,
-	[SYS_SETUID]    = sys_setuid,
-	[SYS_SETGID]    = sys_setgid,
-	[SYS_GETEUID]   = sys_geteuid,
-	[SYS_GETEGID]   = sys_getegid,
-	[SYS_SETPGID]   = sys_setpgid,
-	[SYS_GETPPID]   = sys_getppid,
-	[SYS_GETPGRP]   = sys_getpgrp,
-	[SYS_SETSID]    = sys_setsid,
-	[SYS_SETREUID]  = sys_setreuid,
-	[SYS_SETREGID]  = sys_setregid,
-	[SYS_GETGROUPS] = sys_getgroups,
-	[SYS_SETGROUPS] = sys_setgroups,
-	[SYS_SETRESUID] = sys_setresuid,
-	[SYS_GETRESUID] = sys_getresuid,
-	[SYS_SETRESGID] = sys_setresgid,
-	[SYS_GETRESGID] = sys_getresgid,
-	[SYS_GETPGID]   = sys_getpgid,
-	[SYS_IOCTL]     = sys_ioctl,
-	[SYS_STAT]      = sys_stat,
-	[SYS_FSTAT]     = sys_fstat,
-	[SYS_GETDENTS]  = sys_getdents,
-	[SYS_EXECVE]    = sys_execve,
-	[SYS_LSEEK]     = sys_lseek,
-	[SYS_MMAP]      = sys_mmap,
+	[SYS_EXIT]      = (void*)sys_exit,
+	[SYS_FORK]      = (void*)sys_fork,
+	[SYS_READ]      = (void*)sys_read,
+	[SYS_WRITE]     = (void*)sys_write,
+	[SYS_OPEN]      = (void*)sys_open,
+	[SYS_CLOSE]     = (void*)sys_close,
+	[SYS_TIME]      = (void*)sys_time,
+	[SYS_GETPID]    = (void*)sys_getpid,
+	[SYS_GETUID]    = (void*)sys_getuid,
+	[SYS_GETGID]    = (void*)sys_getgid,
+	[SYS_SETUID]    = (void*)sys_setuid,
+	[SYS_SETGID]    = (void*)sys_setgid,
+	[SYS_GETEUID]   = (void*)sys_geteuid,
+	[SYS_GETEGID]   = (void*)sys_getegid,
+	[SYS_SETPGID]   = (void*)sys_setpgid,
+	[SYS_GETPPID]   = (void*)sys_getppid,
+	[SYS_GETPGRP]   = (void*)sys_getpgrp,
+	[SYS_SETSID]    = (void*)sys_setsid,
+	[SYS_SETREUID]  = (void*)sys_setreuid,
+	[SYS_SETREGID]  = (void*)sys_setregid,
+	[SYS_GETGROUPS] = (void*)sys_getgroups,
+	[SYS_SETGROUPS] = (void*)sys_setgroups,
+	[SYS_SETRESUID] = (void*)sys_setresuid,
+	[SYS_GETRESUID] = (void*)sys_getresuid,
+	[SYS_SETRESGID] = (void*)sys_setresgid,
+	[SYS_GETRESGID] = (void*)sys_getresgid,
+	[SYS_GETPGID]   = (void*)sys_getpgid,
+	[SYS_IOCTL]     = (void*)sys_ioctl,
+	[SYS_STAT]      = (void*)sys_stat,
+	[SYS_FSTAT]     = (void*)sys_fstat,
+	[SYS_GETDENTS]  = (void*)sys_getdents,
+	[SYS_EXECVE]    = (void*)sys_execve,
+	[SYS_LSEEK]     = (void*)sys_lseek,
+	[SYS_MMAP]      = (void*)sys_mmap,
 };
 
 void call_sys(const struct int_ctx *ctx)

@@ -1,155 +1,9 @@
-#include <sys/syscall.h>
-#include <sys/types.h>
 #include <sys/stat.h>
-#include <stdint.h>
-#include <stddef.h>
-#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 #include <errno.h>
-#include <time.h>
-
-#define O_RDONLY (1 << 0)
-#define O_WRONLY (1 << 1)
-#define O_RDWR   (O_RDONLY | O_WRONLY)
-#define O_APPEND (1 << 2)
-#define O_ASYNC  (1 << 3)
-#define O_CREAT  (1 << 4)
-#define O_TRUNC  (1 << 5)
-
-int32_t errno;
-
-size_t strlen(const char *s);
-void *memcpy(void *d, const void *s, size_t n);
-
-int32_t syscall(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, uint32_t arg6);
-
-#define TRANSFORM_ERRNO(ret) \
-do \
-{ \
-	if ((ret) < 0) \
-	{ \
-		errno = -(ret); \
-		ret = -1; \
-	} \
-} while (0)
-
-static int exit(int error_code)
-{
-	int32_t ret = syscall(SYS_EXIT, error_code, 0, 0, 0, 0, 0);
-	TRANSFORM_ERRNO(ret);
-	return ret;
-}
-
-static int fork()
-{
-	int32_t ret = syscall(SYS_FORK, 0, 0, 0, 0, 0, 0);
-	TRANSFORM_ERRNO(ret);
-	return ret;
-}
-
-static int read(int fd, void *buffer, size_t count)
-{
-	int32_t ret = syscall(SYS_READ, fd, (uint32_t)buffer, count, 0, 0, 0);
-	TRANSFORM_ERRNO(ret);
-	return ret;
-}
-
-static int write(int fd, const void *buffer, size_t count)
-{
-	int32_t ret = syscall(SYS_WRITE, fd, (uint32_t)buffer, count, 0, 0, 0);
-	TRANSFORM_ERRNO(ret);
-	return ret;
-}
-
-static int sys_open(const char *path, int flags, mode_t mode)
-{
-	int32_t ret = syscall(SYS_OPEN, (uint32_t)path, flags, mode, 0, 0, 0);
-	TRANSFORM_ERRNO(ret);
-	return ret;
-}
-
-static int open(const char *path, int flags, ...)
-{
-	mode_t mode;
-	va_list va_arg;
-	va_start(va_arg, flags);
-	if (flags & O_CREAT)
-	{
-		mode = va_arg(va_arg, mode_t);
-	}
-	else
-	{
-		mode = 0;
-	}
-	va_end(va_arg);
-	return sys_open(path, flags, mode);
-}
-
-static int close(int fd)
-{
-	int32_t ret = syscall(SYS_CLOSE, fd, 0, 0, 0, 0, 0);
-	TRANSFORM_ERRNO(ret);
-	return ret;
-}
-
-static int stat(const char *pathname, struct stat *statbuf)
-{
-	int32_t ret = syscall(SYS_STAT, (intptr_t)pathname, (intptr_t)statbuf, 0, 0, 0, 0);
-	TRANSFORM_ERRNO(ret);
-	return ret;
-}
-
-static int getdents(int fd, struct sys_dirent *dirp, unsigned count)
-{
-	int32_t ret = syscall(SYS_GETDENTS, fd, (intptr_t)dirp, count, 0, 0, 0);
-	TRANSFORM_ERRNO(ret);
-	return ret;
-}
-
-static int getpid(void)
-{
-	int32_t ret = syscall(SYS_GETPID, 0, 0, 0, 0, 0, 0);
-	TRANSFORM_ERRNO(ret);
-	return ret;
-}
-
-static int execve(const char *pathname, char *const argv[], char *const envp[])
-{
-	int32_t ret = syscall(SYS_EXECVE, (uint32_t)pathname, (uint32_t)argv, (uint32_t)envp, 0, 0, 0);
-	TRANSFORM_ERRNO(ret);
-	return ret;
-}
-
-static int strcmp(const char *s1, const char *s2)
-{
-	size_t i = 0;
-	while (s1[i] && s2[i] && s1[i] == s2[i])
-		i++;
-	return (((uint8_t*)s1)[i] - ((uint8_t*)s2)[i]);
-}
-
-static void *memchr(const void *s, int c, size_t n)
-{
-	for (size_t i = 0; i < n; ++i)
-	{
-		if (((uint8_t*)s)[i] == (uint8_t)c)
-			return (uint8_t*)s + i;
-	}
-	return NULL;
-}
-
-static int strncmp(const char *s1, const char *s2, size_t n)
-{
-	size_t i;
-	for (i = 0; i < n && s1[i] && s2[i]; ++i)
-	{
-		uint8_t d = ((uint8_t*)s1)[i] - ((uint8_t*)s2)[i];
-		if (d)
-			return d;
-	}
-	if (i == n)
-		return 0;
-	return ((uint8_t*)s1)[i] - ((uint8_t*)s2)[i];
-}
+#include <fcntl.h>
 
 static int g_fd;
 
@@ -287,7 +141,10 @@ int main(int ac, char **av, char **ev)
 			if (rd < 0)
 			{
 				if (errno != EAGAIN)
+				{
 					write(g_fd, "rd < 0\n", 7);
+					while (1) ;
+				}
 				continue;
 			}
 			buf_pos += rd;

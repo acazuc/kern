@@ -1,5 +1,5 @@
-#ifndef DEV_TTY_H
-#define DEV_TTY_H
+#ifndef TTY_H
+#define TTY_H
 
 #include <sys/types.h>
 #include <termios.h>

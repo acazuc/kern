@@ -13,6 +13,10 @@
  * 0xFFC00000 - 0xFFFFFFFF (4.0 MB): recursive mapping
  */
 
+#include <sys/queue.h>
+#include <stddef.h>
+#include <stdint.h>
+
 struct vmm_range
 {
 	uint32_t addr;
@@ -46,5 +50,25 @@ struct vmm_ctx
 	void *heap_top;
 #endif
 };
+
+struct vmm_ctx *vmm_ctx_create(void);
+void vmm_ctx_delete(struct vmm_ctx *ctx);
+struct vmm_ctx *vmm_ctx_dup(const struct vmm_ctx *ctx);
+void vmm_setctx(const struct vmm_ctx *ctx);
+
+int vmm_get_free_range(struct vmm_region *region, size_t addr, size_t size, size_t *ret);
+void vmm_set_free_range(struct vmm_region *region, size_t addr, size_t size);
+
+/* XXX: replace vmalloc with vm_alloc_pages + vmap
+ * vm_alloc_pages()
+ * vmap(struct page **pages, size_t pages_nb, size_t flags); (VM_PROT_READ, VM_PROT_WRITE, VM_PROT_EXEC)
+ */
+void *vmalloc(size_t bytes);
+void vfree(void *ptr, size_t bytes);
+void *vmalloc_user(struct vmm_ctx *ctx, void *addr, size_t bytes); /* addr is the destination vaddr (NULL for auto-find) */
+void vfree_user(struct vmm_ctx *ctx, void *ptr, size_t bytes);
+void *vmap(size_t paddr, size_t bytes);
+void *vmap_user(struct vmm_ctx *ctx, void *ptr, size_t bytes);
+void vunmap(void *ptr, size_t bytes);
 
 #endif

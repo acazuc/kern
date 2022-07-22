@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <assert.h>
 #include <stdio.h>
 
 /*
@@ -27,8 +28,8 @@
 
 /*
  * IMPORTANT: assumption is made that the all the directory
- * pages for all the process will always be allocated mapped
- * in the kernel heap region
+ * pages for all the process will always be mapped in the
+ * kernel heap region
  *
  * all the table pages from the kernel memory are pre-allocated
  * and are always visible
@@ -83,7 +84,7 @@
 #define TBL_VADDR(id)  ((uint32_t*)VADDR_RECU_BEG + (id) * 0x400)
 #define DIR_VADDR      ((uint32_t*)0xFFFFF000)
 
-#define PAGE_MASK 0x0FFF
+#define PAGE_MASK 0xFFF
 
 static struct vmm_region g_vmm_heap; /* kernel heap */
 
@@ -286,160 +287,6 @@ static void vmm_unmap_page(uint32_t addr)
 	invlpg(addr);
 }
 
-/* that's a bit of sad code, it somehow should be simplified */
-static uint32_t vmm_get_free_range(struct vmm_region *region, uint32_t addr, uint32_t size)
-{
-	if (addr && (addr < region->addr || addr + size > region->addr + region->size))
-		return UINT32_MAX;
-	if (TAILQ_EMPTY(&region->ranges))
-	{
-		if (!addr || addr == region->addr)
-		{
-			region->range_0.addr = region->addr + size;
-			region->range_0.size = region->size - size;
-			TAILQ_INSERT_HEAD(&region->ranges, &region->range_0, chain);
-			return region->addr;
-		}
-		if (addr + size == region->addr + region->size)
-		{
-			region->range_0.addr = region->addr;
-			region->range_0.size = region->size - size;
-			TAILQ_INSERT_HEAD(&region->ranges, &region->range_0, chain);
-			return region->addr + region->size - size;
-		}
-		struct vmm_range *range = malloc(sizeof(*range), 0);
-		assert(range, "can't allocate new range\n");
-		range->addr = region->addr;
-		range->size = addr - region->addr;
-		TAILQ_INSERT_HEAD(&region->ranges, range, chain);
-		region->range_0.addr = addr + size;
-		region->range_0.size = region->addr + region->size - region->range_0.addr;
-		TAILQ_INSERT_HEAD(&region->ranges, &region->range_0, chain);
-		return addr;
-	}
-	struct vmm_range *item;
-	if (addr)
-	{
-		TAILQ_FOREACH(item, &region->ranges, chain)
-		{
-			if (addr < item->addr)
-				return UINT32_MAX;
-			if (addr >= item->addr + item->size)
-				continue;
-			if (size > item->size)
-				continue;
-			if (item->size == size)
-			{
-				if (item->addr != addr)
-					continue;
-				TAILQ_REMOVE(&region->ranges, item, chain);
-				if (item != &region->range_0)
-					free(item);
-				return addr;
-			}
-			if (addr == item->addr)
-			{
-				item->addr += size;
-				item->size -= size;
-				return addr;
-			}
-			if (addr + size == item->addr + item->size)
-			{
-				item->size -= size;
-				return addr;
-			}
-			struct vmm_range *newr = malloc(sizeof(*newr), 0);
-			assert(newr, "can't allocate new range\n");
-			newr->addr = addr + size;
-			newr->size = item->size - (addr + size - item->addr);
-			TAILQ_INSERT_AFTER(&region->ranges, item, newr, chain);
-			item->size = addr - item->addr;
-			return addr;
-		}
-	}
-	else
-	{
-		TAILQ_FOREACH(item, &region->ranges, chain)
-		{
-			if (item->size < size)
-				continue;
-			uint32_t addr = item->addr;
-			if (item->size == size)
-			{
-				TAILQ_REMOVE(&region->ranges, item, chain);
-				if (item != &region->range_0)
-					free(item);
-			}
-			else
-			{
-				item->addr += size;
-				item->size -= size;
-			}
-			return addr;
-		}
-	}
-	return UINT32_MAX;
-}
-
-/* same sad code sa above */
-static void vmm_set_free_range(struct vmm_region *region, uint32_t addr, uint32_t size)
-{
-	if (TAILQ_EMPTY(&region->ranges))
-	{
-		region->range_0.addr = addr;
-		region->range_0.size = size;
-		TAILQ_INSERT_HEAD(&region->ranges, &region->range_0, chain);
-		return;
-	}
-	struct vmm_range *item;
-	TAILQ_FOREACH(item, &region->ranges, chain)
-	{
-		if (item->addr == addr + size)
-		{
-			item->addr -= size;
-			item->size += size;
-			struct vmm_range *prev = TAILQ_PREV(item, vmm_range_head, chain);
-			if (!prev)
-				return;
-			if (prev->addr + size != addr)
-				return;
-			prev->size += item->size;
-			TAILQ_REMOVE(&region->ranges, item, chain);
-			if (item != &region->range_0)
-				free(item);
-			return;
-		}
-		if (item->addr + item->size == addr)
-		{
-			item->size += size;
-			struct vmm_range *next = TAILQ_NEXT(item, chain);
-			if (!next)
-				return;
-			if (next->addr != item->addr + item->size)
-				return;
-			item->size += next->size;
-			TAILQ_REMOVE(&region->ranges, next, chain);
-			if (next != &region->range_0)
-				free(next);
-			return;
-		}
-		if (addr < item->addr)
-		{
-			struct vmm_range *new = malloc(sizeof(*new), 0);
-			assert(new, "can't allocate new free space\n");
-			new->addr = addr;
-			new->size = size;
-			TAILQ_INSERT_BEFORE(item, new, chain);
-			return;
-		}
-	}
-	struct vmm_range *new = malloc(sizeof(*new), 0);
-	assert(new, "can't allocate new free space\n");
-	new->addr = addr;
-	new->size = size;
-	TAILQ_INSERT_TAIL(&region->ranges, new, chain);
-}
-
 void vmm_setctx(const struct vmm_ctx *ctx)
 {
 	setcr3(ctx->dir_paddr);
@@ -552,8 +399,7 @@ static void *vmalloc_zone(struct vmm_ctx *ctx, void *ptr, size_t size, int user)
 	uint32_t addr = (uint32_t)ptr;
 	assert(!(addr & PAGE_MASK), "vmalloc unaligned addr 0x%" PRIx32 "\n", addr);
 	assert(!(size & PAGE_MASK), "vmalloc unaligned size 0x%" PRIx32 "\n", size);
-	addr = vmm_get_free_range(ctx ? &ctx->region : &g_vmm_heap, addr, size);
-	if (addr == UINT32_MAX)
+	if (vmm_get_free_range(ctx ? &ctx->region : &g_vmm_heap, addr, size, &addr))
 		return NULL;
 	assert(!(addr & PAGE_MASK), "vmalloc unaligned data 0x%" PRIx32 "\n", addr);
 	for (uint32_t i = 0; i < size; i += PAGE_SIZE)
@@ -600,8 +446,8 @@ void *vmap(size_t paddr, size_t size)
 {
 	assert(!(paddr & PAGE_MASK), "vmap unaligned addr 0x%" PRIx32 "\n", paddr);
 	assert(!(size  & PAGE_MASK), "vmap unaligned size 0x%" PRIx32 "\n", size);
-	uint32_t addr = vmm_get_free_range(&g_vmm_heap, 0, size);
-	if (addr == UINT32_MAX)
+	uint32_t addr;
+	if (vmm_get_free_range(&g_vmm_heap, 0, size, &addr))
 		return NULL;
 	assert(!(addr & PAGE_MASK), "vmap unaligned data 0x%" PRIx32 "\n", addr);
 	for (uint32_t i = 0; i < size; i += PAGE_SIZE)
@@ -615,8 +461,8 @@ void *vmap_user(struct vmm_ctx *ctx, void *ptr, size_t size)
 	uint32_t uaddr = (uint32_t)ptr;
 	assert(!(uaddr & PAGE_MASK), "vmap unaligned addr 0x%" PRIx32 "\n", uaddr);
 	assert(!(size & PAGE_MASK), "vmap unaligned size 0x%" PRIx32 "\n", size);
-	uint32_t addr = vmm_get_free_range(&g_vmm_heap, 0, size);
-	if (addr == UINT32_MAX)
+	uint32_t addr;
+	if (vmm_get_free_range(&g_vmm_heap, 0, size, &addr))
 		return NULL;
 	assert(!(addr & PAGE_MASK), "vmap unaligned data 0x%" PRIx32 "\n", addr);
 	for (uint32_t i = 0; i < size; i += PAGE_SIZE)

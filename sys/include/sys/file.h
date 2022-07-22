@@ -6,6 +6,7 @@
 
 struct file_op;
 struct fs_node;
+struct vmm_ctx;
 
 struct file
 {

@@ -1,5 +1,5 @@
-#ifndef MTX_LOCK_H
-#define MTX_LOCK_H
+#ifndef MUTEX_H
+#define MUTEX_H
 
 #include <stddef.h>
 

@@ -1,9 +1,4 @@
-#include <sys/syscall.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdarg.h>
+#include <ld.h>
 
 #define TRANSFORM_ERRNO(ret) \
 do \
@@ -23,9 +18,9 @@ do \
 #define O_CREAT  (1 << 4)
 #define O_TRUNC  (1 << 5)
 
-int32_t errno;
+int errno;
 
-int32_t syscall(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, uint32_t arg6);
+ssize_t syscall(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, uint32_t arg6);
 
 int exit(int error_code)
 {

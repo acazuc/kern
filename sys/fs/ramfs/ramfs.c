@@ -1,16 +1,19 @@
 #include "ramfs.h"
-#include "arch/arch.h"
-#include "fs/vfs.h"
 
 #include <sys/queue.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <inttypes.h>
+#include <sys/std.h>
+#include <sys/vmm.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 #include <stdio.h>
 #include <errno.h>
+#include <arch.h>
+#include <vfs.h>
 
 static int dir_lookup(struct fs_node *node, const char *name, uint32_t namelen, struct fs_node **child);
 static int dir_readdir(struct fs_node *node, struct fs_readdir_ctx *ctx);
@@ -91,7 +94,7 @@ struct ramfs_reg
 	size_t size;
 };
 
-static size_t g_ino;
+static size_t g_ino; /* per sb */
 
 static int reg_read(struct file *file, void *data, size_t count)
 {

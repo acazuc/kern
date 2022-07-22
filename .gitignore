@@ -2,7 +2,7 @@ os.bin
 os.iso
 *.o
 obj
-isodir
+iso
 *.swp
 *.swo
 disk.qcow2

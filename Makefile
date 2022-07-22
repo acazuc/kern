@@ -2,7 +2,8 @@ MKDIR=$(PWD)/mk
 
 include $(MKDIR)/env.mk
 
-INCLUDE_SYSDIR = sys/include
+INCLUDE_SYSDIR = sys/include \
+                 sys/arch/x86/include
 
 BIN_NAME = os.bin
 
@@ -29,6 +30,8 @@ SRC_NAME = arch/x86/boot.S \
            dev/pic/pic.c \
            dev/vga/txt.c \
            dev/vga/rgb.c \
+           dev/vga/vga.c \
+           dev/vga/font.c \
            dev/pit/pit.c \
            dev/com/com.c \
            dev/ps2/ps2.c \
@@ -51,6 +54,7 @@ SRC_NAME = arch/x86/boot.S \
            kern/proc.c \
            kern/elf.c \
            kern/file.c \
+           kern/vmm.c \
 
 SRC_PATH = sys
 
@@ -67,10 +71,10 @@ OBJ = $(addprefix $(OBJ_PATH)/, $(OBJ_NAME))
 all: $(BIN_NAME)
 
 $(BIN):
-	@make MKDIR=$(MKDIR) INCLUDE_SYSDIR=$(PWD)/$(INCLUDE_SYSDIR) -C $(BIN)
+	@make MKDIR=$(MKDIR) INCLUDE_SYSDIR=include -C $(BIN)
 
 $(LIB):
-	@make MKDIR=$(MKDIR) INCLUDE_SYSDIR=$(PWD)/$(INCLUDE_SYSDIR) -C $(LIB)
+	@make MKDIR=$(MKDIR) INCLUDE_SYSDIR=include -C $(LIB)
 
 $(LDFILE):
 
@@ -101,11 +105,11 @@ $(BIN_NAME): $(OBJ) $(LDFILE) lib bin
 
 $(ISO_NAME): $(BIN_NAME)
 	@mkdir -p $(dir $<)
-	@mkdir -p isodir/boot
-	@cp $(BIN_NAME) isodir/boot
-	@mkdir -p isodir/boot/grub
-	@cp grub.cfg isodir/boot/grub
-	@grub-mkrescue -o $@ isodir
+	@mkdir -p iso/boot
+	@cp $(BIN_NAME) iso/boot
+	@mkdir -p iso/boot/grub
+	@cp grub.cfg iso/boot/grub
+	@grub-mkrescue -o $@ iso
 
 $(DISK_FILE):
 	@echo "Creating 100M disk image"

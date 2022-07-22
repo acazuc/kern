@@ -7,6 +7,7 @@
 #include <inttypes.h>
 #include <string.h>
 #include <stdint.h>
+#include <assert.h>
 #include <stdio.h>
 #include <errno.h>
 
@@ -88,7 +89,7 @@ static void handle_general_protection_fault(const struct int_ctx *ctx)
 static void handle_page_fault(const struct int_ctx *ctx)
 {
 	uint32_t page_addr = getcr2();
-#if 1
+#if 0
 	printf("page fault addr 0x%08" PRIx32 ": 0x%08" PRIx32 " @ 0x%08" PRIx32 " (%" PRIx32 ")\n", page_addr, ctx->err, ctx->trapframe.eip, ctx->trapframe.esp);
 #endif
 	if (!(ctx->err & 1))

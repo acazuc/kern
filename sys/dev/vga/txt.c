@@ -1,12 +1,15 @@
-#include "txt.h"
-#include "arch/arch.h"
+#include "vga.h"
 #include "arch/x86/asm.h"
-#include "dev/tty/tty.h"
 
+#include <sys/vmm.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <assert.h>
+#include <string.h>
 #include <errno.h>
+#include <arch.h>
+#include <tty.h>
 
 #define CRTC_ADDR 0x3D4
 #define CRTC_DATA 0x3D5
@@ -39,11 +42,9 @@
 
 struct vga_txt
 {
-	uint16_t *addr;
+	struct vga vga;
+	uint8_t *addr;
 	size_t size;
-	uint32_t width;
-	uint32_t height;
-	uint32_t pitch;
 };
 
 static struct vga_txt g_vga_txt;
@@ -68,77 +69,10 @@ enum vga_color
 	VGA_COLOR_WHITE         = 0xF,
 };
 
-static void set_val(uint8_t x, uint8_t y, uint16_t val);
-
-static inline uint8_t entry_color(enum vga_color fg, enum vga_color bg) 
-{
-	return fg | bg << 4;
-}
-
-static inline uint16_t mkentry(unsigned char uc, uint8_t color) 
-{
-	return (uint16_t)uc | (uint16_t)color << 8;
-}
-
-void vga_txt_init(uint32_t paddr, uint32_t width, uint32_t height, uint32_t pitch)
-{
-	g_vga_txt.size = height * pitch;
-	g_vga_txt.size += PAGE_SIZE - 1;
-	g_vga_txt.size -= g_vga_txt.size % PAGE_SIZE;
-	g_vga_txt.addr = vmap(paddr, g_vga_txt.size);
-	g_vga_txt.width = width;
-	g_vga_txt.height = height;
-	g_vga_txt.pitch = pitch / 2;
-	uint16_t clear_entry = mkentry(' ', entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
-	for (size_t y = 0; y < height; ++y)
-	{
-		for (size_t x = 0; x < width; ++x)
-			set_val(x, y, clear_entry);
-	}
-}
-
-static void set_char(uint8_t x, uint8_t y, char c, uint8_t color)
-{
-	set_val(x, y, mkentry(c, color));
-}
-
-static uint16_t get_val(uint8_t x, uint8_t y)
-{
-	return g_vga_txt.addr[y * g_vga_txt.pitch + x];
-}
-
-static void set_val(uint8_t x, uint8_t y, uint16_t val)
-{
-	g_vga_txt.addr[y * g_vga_txt.pitch + x] = val;
-}
-
-static void set_cursor(uint8_t x, uint8_t y)
-{
-	uint16_t p = y * g_vga_txt.width + x;
-	outb(CRTC_ADDR, CRTC_ADDR_CURSOR_HGH);
-	outb(CRTC_DATA, (p >> 8) & 0xFF);
-	outb(CRTC_ADDR, CRTC_ADDR_CURSOR_LOW);
-	outb(CRTC_DATA, p & 0xFF);
-}
-
-static void enable_cursor(void)
-{
-	outb(CRTC_ADDR, CRTC_ADDR_CURSOR_BEG);
-	outb(CRTC_DATA, (inb(CRTC_DATA) & 0xC0) | 13);
-	outb(CRTC_ADDR, CRTC_ADDR_CURSOR_END);
-	outb(CRTC_DATA, (inb(CRTC_DATA) & 0xE0) | 15);
-}
-
-static void disable_cursor(void)
-{
-	outb(CRTC_ADDR, CRTC_ADDR_CURSOR_BEG);
-	outb(CRTC_DATA, 0x20);
-}
-
 struct vga_txt_tty
 {
-	uint8_t row;
-	uint8_t column;
+	uint8_t x;
+	uint8_t y;
 	uint8_t color;
 	uint8_t fg_color;
 	uint8_t bg_color;
@@ -193,6 +127,77 @@ static const uint8_t g_bg_colors[] =
 	VGA_COLOR_BLACK
 };
 
+static void set_val(uint8_t x, uint8_t y, uint16_t val);
+
+static inline uint8_t entry_color(enum vga_color fg, enum vga_color bg) 
+{
+	return fg | bg << 4;
+}
+
+static inline uint16_t mkentry(unsigned char uc, uint8_t color) 
+{
+	return (uint16_t)uc | (uint16_t)color << 8;
+}
+
+void vga_txt_init(uint32_t paddr, uint32_t width, uint32_t height, uint32_t pitch)
+{
+	g_vga_txt.vga.rgb = 0;
+	g_vga_txt.vga.paddr = paddr;
+	g_vga_txt.vga.width = width;
+	g_vga_txt.vga.height = height;
+	g_vga_txt.vga.pitch = pitch;
+	g_vga_txt.size = height * pitch;
+	g_vga_txt.size += PAGE_SIZE - 1;
+	g_vga_txt.size -= g_vga_txt.size % PAGE_SIZE;
+	g_vga_txt.addr = vmap(paddr, g_vga_txt.size);
+	assert(g_vga_txt.addr, "failed to vmap vga txt\n");
+	uint16_t clear_entry = mkentry(' ', entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+	for (size_t y = 0; y < height; ++y)
+	{
+		for (size_t x = 0; x < width; ++x)
+			set_val(x, y, clear_entry);
+	}
+	g_vga = &g_vga_txt.vga;
+}
+
+static void set_char(uint8_t x, uint8_t y, char c, uint8_t color)
+{
+	set_val(x, y, mkentry(c, color));
+}
+
+static uint16_t get_val(uint8_t x, uint8_t y)
+{
+	return *(uint16_t*)(&g_vga_txt.addr[y * g_vga_txt.vga.pitch + x * 2]);
+}
+
+static void set_val(uint8_t x, uint8_t y, uint16_t val)
+{
+	*(uint16_t*)(&g_vga_txt.addr[y * g_vga_txt.vga.pitch + x * 2]) = val;
+}
+
+static void set_cursor(uint8_t x, uint8_t y)
+{
+	uint16_t p = y * g_vga_txt.vga.width + x;
+	outb(CRTC_ADDR, CRTC_ADDR_CURSOR_HGH);
+	outb(CRTC_DATA, (p >> 8) & 0xFF);
+	outb(CRTC_ADDR, CRTC_ADDR_CURSOR_LOW);
+	outb(CRTC_DATA, p & 0xFF);
+}
+
+static void enable_cursor(void)
+{
+	outb(CRTC_ADDR, CRTC_ADDR_CURSOR_BEG);
+	outb(CRTC_DATA, (inb(CRTC_DATA) & 0xC0) | 13);
+	outb(CRTC_ADDR, CRTC_ADDR_CURSOR_END);
+	outb(CRTC_DATA, (inb(CRTC_DATA) & 0xE0) | 15);
+}
+
+static void disable_cursor(void)
+{
+	outb(CRTC_ADDR, CRTC_ADDR_CURSOR_BEG);
+	outb(CRTC_DATA, 0x20);
+}
+
 static int vga_tty_read(struct tty *tty, void *data, size_t len)
 {
 	/* XXX */
@@ -204,83 +209,79 @@ static int vga_tty_read(struct tty *tty, void *data, size_t len)
 
 static void scroll_up(void)
 {
-	for (size_t y = 1; y < g_vga_txt.height; ++y)
-	{
-		for (size_t x = 0; x < g_vga_txt.width; ++x)
-			set_val(x, y - 1, get_val(x, y));
-	}
-	for (size_t x = 0; x < g_vga_txt.width; ++x)
-		set_val(x, g_vga_txt.height - 1, 0);
+	for (size_t y = 1; y < g_vga_txt.vga.height; ++y)
+		memcpy(&g_vga_txt.addr[y * g_vga_txt.vga.pitch], &g_vga_txt.addr[(y + 1) * g_vga_txt.vga.pitch], g_vga_txt.vga.pitch);
+	memset(&g_vga_txt.addr[(g_vga_txt.vga.height - 1) * g_vga_txt.vga.pitch], 0, g_vga_txt.vga.pitch);
 }
 
-static void putchar(struct vga_txt_tty *vga_tty, char c)
+static void putchar(struct vga_txt_tty *vga_tty, uint8_t c)
 {
 	if (c == 0x7F)
 	{
-		if (vga_tty->column == 0)
+		if (vga_tty->x == 0)
 		{
-			vga_tty->column = g_vga_txt.width - 1;
-			if (vga_tty->row)
-				vga_tty->row--;
+			vga_tty->x = g_vga_txt.vga.width - 1;
+			if (vga_tty->y)
+				vga_tty->y--;
 		}
 		else
 		{
-			vga_tty->column--;
+			vga_tty->x--;
 		}
-		set_cursor(vga_tty->column, vga_tty->row);
-		set_char(vga_tty->column, vga_tty->row, ' ', entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+		set_cursor(vga_tty->x, vga_tty->y);
+		set_char(vga_tty->x, vga_tty->y, ' ', entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
 		return;
 	}
 
 	if (c == '\b')
 	{
-		if (vga_tty->column == 0)
+		if (vga_tty->x == 0)
 		{
-			vga_tty->column = g_vga_txt.width - 1;
-			if (vga_tty->row)
-				vga_tty->row--;
+			vga_tty->x = g_vga_txt.vga.width - 1;
+			if (vga_tty->y)
+				vga_tty->y--;
 		}
 		else
 		{
-			vga_tty->column--;
+			vga_tty->x--;
 		}
-		set_cursor(vga_tty->column, vga_tty->row);
+		set_cursor(vga_tty->x, vga_tty->y);
 		return;
 	}
 
 	if (c == '\n')
 	{
-		if (vga_tty->row == g_vga_txt.height - 1)
+		if (vga_tty->y == g_vga_txt.vga.height - 1)
 			scroll_up();
 		else
-			vga_tty->row++;
-		vga_tty->column = 0;
-		set_cursor(vga_tty->column, vga_tty->row);
-		set_char(vga_tty->column, vga_tty->row, ' ', entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+			vga_tty->y++;
+		vga_tty->x = 0;
+		set_cursor(vga_tty->x, vga_tty->y);
+		set_char(vga_tty->x, vga_tty->y, ' ', entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
 		return;
 	}
 
-	set_char(vga_tty->column, vga_tty->row, c, vga_tty->color);
-	vga_tty->column++;
+	set_char(vga_tty->x, vga_tty->y, c, vga_tty->color);
+	vga_tty->x++;
 
-	if (vga_tty->column == g_vga_txt.width)
+	if (vga_tty->x == g_vga_txt.vga.width)
 	{
-		if (vga_tty->row == g_vga_txt.height - 1)
+		if (vga_tty->y == g_vga_txt.vga.height - 1)
 			scroll_up();
 		else
-			vga_tty->row++;
-		vga_tty->column = 0;
+			vga_tty->y++;
+		vga_tty->x = 0;
 	}
 
-	set_cursor(vga_tty->column, vga_tty->row);
-	set_char(vga_tty->column, vga_tty->row, ' ', entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+	set_cursor(vga_tty->x, vga_tty->y);
+	set_char(vga_tty->x, vga_tty->y, ' ', entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
 }
 
 static int vga_tty_write(struct tty *tty, const void *data, size_t len)
 {
 	struct vga_txt_tty *vga_tty = tty->userptr;
 	for (size_t i = 0; i < len; ++i)
-		putchar(vga_tty, ((char*)data)[i]);
+		putchar(vga_tty, ((uint8_t*)data)[i]);
 	return len;
 }
 
@@ -336,7 +337,7 @@ static int vga_tty_ctrl(struct tty *tty, enum tty_ctrl ctrl, uint32_t val)
 	return 0;
 }
 
-static struct tty_op g_tty_vga_op =
+static struct tty_op g_tty_op =
 {
 	.read = vga_tty_read,
 	.write = vga_tty_write,
@@ -350,7 +351,7 @@ int vga_txt_mktty(const char *name, int id, struct tty **tty)
 		return ENOMEM;
 	vga_tty->fg_color = 7;
 	update_color(vga_tty);
-	int res = tty_create(name, makedev(4, id), &g_tty_vga_op, tty);
+	int res = tty_create(name, makedev(4, id), &g_tty_op, tty);
 	if (res)
 		return res;
 	(*tty)->userptr = vga_tty;

@@ -1,35 +1,28 @@
-#include <sys/syscall.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdarg.h>
-#include <unistd.h>
-#include <errno.h>
+#include <ld.h>
 #include <elf.h>
 
 #define PAGE_SIZE 4096 /* XXX in header */
+#define MAXPATHLEN 1024 /* XXX in header */
 
-#define O_RDONLY (1 << 0)
-#define O_WRONLY (1 << 1)
-#define O_RDWR   (O_RDONLY | O_WRONLY)
-#define O_APPEND (1 << 2)
-#define O_ASYNC  (1 << 3)
-#define O_CREAT  (1 << 4)
-#define O_TRUNC  (1 << 5)
+#if 0
+#define DEBUG
+#endif
 
-extern int32_t errno;
 int g_stdout;
 
 /* containing a dyn object (either target binary or dependency) */
 struct elf
 {
-	char name[256];
+	char path[MAXPATHLEN];
 	int fd;
 	size_t addr;
 	Elf32_Ehdr ehdr;
 	Elf32_Phdr phdr[16]; /* dynamic ? */
+	Elf32_Shdr shdr[32]; /* dynamic ? */
 	struct elf *dep[256]; /* dynamic ? */
+	char shstrtab[512]; /* dynamic ? */
+	Elf32_Shdr *dynsym;
+	Elf32_Shdr *dynstr;
 	size_t dep_nb;
 	const Elf32_Dyn *symtab;
 	const Elf32_Dyn *syment;
@@ -37,51 +30,12 @@ struct elf
 	const Elf32_Dyn *strsz;
 };
 
-struct elf g_elf[256]; /* maximum number of ELF objects loaded */
+struct elf g_elf[16]; /* maximum number of ELF objects loaded */
 size_t g_elf_nb;
-
-int exit(int error_code);
-int read(int fd, void *buffer, size_t count);
-int write(int fd, const void *buffer, size_t count);
-int open(const char *path, int flags, ...);
-int close(int fd);
-int lseek(int fd, off_t off, int whence);
-void *mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off);
 
 static int elf_read(struct elf *elf);
 static int elf_resolve(struct elf *elf);
 static int elf_map(struct elf *elf);
-
-static size_t strlen(const char *s)
-{
-	size_t i = 0;
-	while (s[i])
-		i++;
-	return i;
-}
-
-static void *memset(void *d, int c, size_t len)
-{
-	for (size_t i = 0; i < len; ++i)
-		((uint8_t*)d)[i] = c;
-	return d;
-}
-
-static size_t strlcpy(char *d, const char *s, size_t n)
-{
-	size_t i;
-	for (i = 0; s[i] && i < n - 1; ++i)
-		d[i] = s[i];
-	d[i] = '\0';
-	while (s[i])
-		++i;
-	return i;
-}
-
-static void puts(const char *s)
-{
-	write(g_stdout, s, strlen(s));
-}
 
 static struct elf *getelf(void)
 {
@@ -95,16 +49,40 @@ static struct elf *getelf(void)
 	return elf;
 }
 
-static uint32_t find_dep_sym(struct elf *elf, const char *name)
+static struct elf *find_elf(const char *path)
+{
+	for (size_t i = 0; i < g_elf_nb; ++i)
+	{
+		struct elf *elf = &g_elf[i];
+		if (!strcmp(elf->path, path))
+			return elf;
+	}
+	return NULL;
+}
+
+static uint32_t find_dep_sym(struct elf *elf, const char *name, uint8_t type)
 {
 	for (size_t i = 0; i < elf->dep_nb; ++i)
 	{
 		struct elf *dep = elf->dep[i];
-		if (dep->symtab && dep->strtab)
+		if (dep->dynsym && dep->dynstr)
 		{
-			//
+			for (size_t j = 0; j < dep->dynsym->sh_size; j += dep->dynsym->sh_entsize)
+			{
+				const Elf32_Sym *sym = (const Elf32_Sym*)(dep->addr + dep->dynsym->sh_addr + j);
+				if (sym->st_shndx == SHN_UNDEF)
+					continue;
+				if (ELF32_ST_BIND(sym->st_info) != STB_GLOBAL)
+					continue;
+				if (ELF32_ST_TYPE(sym->st_info) != type)
+					continue;
+				const char *sym_name = (const char *)(dep->addr + dep->dynstr->sh_addr + sym->st_name);
+				if (strcmp(sym_name, name))
+					continue;
+				return dep->addr + sym->st_value;
+			}
 		}
-		uint32_t dep_sym = find_dep_sym(dep, name);
+		uint32_t dep_sym = find_dep_sym(dep, name, type);
 		if (dep_sym)
 			return dep_sym;
 	}
@@ -115,7 +93,7 @@ static const Elf32_Dyn *get_dyn(struct elf *elf, const Elf32_Phdr *phdr, Elf32_S
 {
 	for (size_t i = 0; i < phdr->p_filesz; i += sizeof(Elf32_Dyn))
 	{
-		const Elf32_Dyn *dyn = (const Elf32_Dyn*)(elf->addr + phdr->p_offset + i);
+		const Elf32_Dyn *dyn = (const Elf32_Dyn*)(elf->addr + phdr->p_vaddr + i);
 		if (dyn->d_tag == tag)
 			return dyn;
 	}
@@ -134,15 +112,16 @@ static int handle_dt_rel(struct elf *elf, const Elf32_Dyn *rel, const Elf32_Dyn 
 				*(uint32_t*)addr += elf->addr;
 				break;
 			case R_386_JMP_SLOT:
+			case R_386_GLOB_DAT:
 			{
 				if (!elf->symtab)
 				{
-					puts("no symtab on jmpslot rel\n");
+					puts("no symtab on jmpslot / globdat rel\n");
 					return 1;
 				}
 				if (!elf->strtab)
 				{
-					puts("no strtab on jmpslot rel\n");
+					puts("no strtab on jmpslot / globdat rel\n");
 					return 1;
 				}
 				uint32_t symidx = ELF32_R_SYM(r->r_info);
@@ -150,7 +129,12 @@ static int handle_dt_rel(struct elf *elf, const Elf32_Dyn *rel, const Elf32_Dyn 
 				if (sym->st_shndx == SHN_UNDEF)
 				{
 					const char *name = (const char*)(elf->addr + elf->strtab->d_un.d_ptr + sym->st_name);
-					uint32_t value = find_dep_sym(elf, name);
+#ifdef DEBUG
+					puts("searching symbol ");
+					puts(name);
+					puts("\n");
+#endif
+					uint32_t value = find_dep_sym(elf, name, ELF32_ST_TYPE(sym->st_info));
 					if (!value)
 					{
 						puts("symbol not found: ");
@@ -166,25 +150,10 @@ static int handle_dt_rel(struct elf *elf, const Elf32_Dyn *rel, const Elf32_Dyn 
 				}
 				break;
 			}
-			case R_386_GLOB_DAT:
-			{
-				if (!elf->symtab)
-				{
-					puts("no symtab on globdat rel\n");
-					return 1;
-				}
-				if (!elf->strtab)
-				{
-					puts("no strtab on globdat rel\n");
-					return 1;
-				}
-				uint32_t symidx = ELF32_R_SYM(r->r_info);
-				const Elf32_Sym *sym = (const Elf32_Sym*)(elf->addr + elf->symtab->d_un.d_ptr + symidx * elf->syment->d_un.d_val);
-				*addr = elf->addr + sym->st_value;
-				break;
-			}
 			default:
-				puts("unhalded reloc type\n");
+				puts("unhandled reloc type: ");
+				putx(ELF32_R_TYPE(r->r_info));
+				puts("\n");
 				return 1;
 		}
 	}
@@ -199,7 +168,7 @@ static int handle_pt_dynamic(struct elf *elf, const Elf32_Phdr *phdr)
 	/* XXX: one DT_RELAENT if DT_RELA */
 	for (size_t i = 0; i < phdr->p_filesz; i += sizeof(Elf32_Dyn))
 	{
-		const Elf32_Dyn *dyn = (const Elf32_Dyn*)(elf->addr + phdr->p_offset + i);
+		const Elf32_Dyn *dyn = (const Elf32_Dyn*)(elf->addr + phdr->p_vaddr + i);
 		switch (dyn->d_tag)
 		{
 			case DT_NULL:
@@ -254,7 +223,9 @@ static int handle_pt_dynamic(struct elf *elf, const Elf32_Phdr *phdr)
 				/* XXX */
 				break;
 			default:
-				puts("unhandled dyn tag\n");
+				puts("unhandled dyn tag: ");
+				putx(dyn->d_tag);
+				puts("\n");
 				return 1;
 		}
 	}
@@ -271,7 +242,7 @@ enditer:
 	}
 	for (size_t i = 0; i < phdr->p_filesz; i += sizeof(Elf32_Dyn))
 	{
-		const Elf32_Dyn *dyn = (const Elf32_Dyn*)(elf->addr + phdr->p_offset + i);
+		const Elf32_Dyn *dyn = (const Elf32_Dyn*)(elf->addr + phdr->p_vaddr + i);
 		if (dyn->d_tag != DT_NEEDED)
 			continue;
 		if (!elf->strtab)
@@ -285,46 +256,55 @@ enditer:
 			return 1;
 		}
 		const char *name = (const char*)(elf->addr + elf->strtab->d_un.d_ptr + dyn->d_un.d_val);
-		char filepath[256] = "/lib/"; /* XXX MAXPATHLEN */
-		if (strlcpy(filepath + 5, name, sizeof(filepath) - 5) >= sizeof(filepath) - 5)
+		char path[MAXPATHLEN] = "/lib/";
+		if (strlcpy(path + 5, name, sizeof(path) - 5) >= sizeof(path) - 5)
 		{
 			puts("filepath too long\n");
 			return 1;
 		}
-		int fd = open(filepath, O_RDONLY);
-		if (fd < 0)
-		{
-			puts("failed to open dependency\n");
-			return 1;
-		}
-		struct elf *dep = getelf();
+		struct elf *dep = find_elf(path);
 		if (!dep)
 		{
-			close(fd);
-			puts("failed to get dep\n");
-			return 1;
-		}
-		dep->fd = fd;
-		puts("handling dep: ");
-		puts(name);
-		puts("\n");
-		if (elf_read(dep))
-		{
-			puts("failed to read dep\n");
-			return 1;
-		}
-		if (elf_map(dep))
-		{
-			puts("failed to map dep\n");
-			return 1;
-		}
-		if (elf_resolve(dep))
-		{
-			puts("failed to resolve dep\n");
-			return 1;
+			int fd = open(path, O_RDONLY);
+			if (fd < 0)
+			{
+				puts("failed to open dependency\n");
+				return 1;
+			}
+			dep = getelf();
+			if (!dep)
+			{
+				close(fd);
+				puts("failed to get dep\n");
+				return 1;
+			}
+			strcpy(dep->path, path);
+			dep->fd = fd;
+#ifdef DEBUG
+			puts("handling dep: ");
+			puts(name);
+			puts("\n");
+#endif
+			if (elf_read(dep))
+			{
+				puts("failed to read dep\n");
+				return 1;
+			}
+			if (elf_map(dep))
+			{
+				puts("failed to map dep\n");
+				return 1;
+			}
+			if (elf_resolve(dep))
+			{
+				puts("failed to resolve dep\n");
+				return 1;
+			}
+#ifdef DEBUG
+			puts("handled\n");
+#endif
 		}
 		elf->dep[elf->dep_nb++] = dep;
-		puts("handled\n");
 	}
 	const Elf32_Dyn *rel = get_dyn(elf, phdr, DT_REL);
 	if (rel)
@@ -375,7 +355,9 @@ enditer:
 				puts("unsupported DT_RELA\n");
 				return 1;
 			default:
-				puts("unhandled pltrel type\n");
+				puts("unhandled pltrel type: ");
+				putx(pltrel->d_un.d_val);
+				puts("\n");
 				return 1;
 		}
 	}
@@ -384,7 +366,7 @@ enditer:
 
 static int handle_pt_load(struct elf *elf, const Elf32_Phdr *phdr)
 {
-	if (phdr->p_align % PAGE_SIZE != 0)
+	if (phdr->p_align != PAGE_SIZE)
 	{
 		puts("PT_LOAD invalid align\n");
 		return 1;
@@ -395,8 +377,10 @@ static int handle_pt_load(struct elf *elf, const Elf32_Phdr *phdr)
 	size += phdr->p_vaddr - addr;
 	size += PAGE_SIZE - 1;
 	size -= size % PAGE_SIZE;
+	size_t offset = phdr->p_offset;
+	offset -= offset % PAGE_SIZE;
 	void *dst = (void*)(elf->addr + addr);
-	void *ptr = mmap(dst, size, 0/* XXX */, 0 /* XXX */, elf->fd, phdr->p_offset);
+	void *ptr = mmap(dst, size, 0/* XXX */, 0 /* XXX */, elf->fd, offset);
 	if (ptr == (void*)-1)
 	{
 		puts("mmap failed\n");
@@ -502,9 +486,19 @@ static int elf_read(struct elf *elf)
 		puts("too much phdr\n");
 		return 1;
 	}
+	if (elf->ehdr.e_shnum > sizeof(elf->shdr) / sizeof(*elf->shdr))
+	{
+		puts("too much shdr\n");
+		return 1;
+	}
+	if (elf->ehdr.e_shstrndx >= elf->ehdr.e_shnum)
+	{
+		puts("invalid shstrtab position\n");
+		return 1;
+	}
 	for (size_t i = 0; i < elf->ehdr.e_phnum; ++i)
 	{
-		ssize_t dst = elf->addr + elf->ehdr.e_phoff + elf->ehdr.e_phentsize * i;
+		ssize_t dst = elf->ehdr.e_phoff + elf->ehdr.e_phentsize * i;
 		if (lseek(elf->fd, dst, SEEK_SET) != dst)
 		{
 			puts("failed to seek phdr\n");
@@ -516,8 +510,64 @@ static int elf_read(struct elf *elf)
 			return 1;
 		}
 	}
-
-	elf->addr = 0x100000 + 0x100000 * g_elf_nb; /* XXX use current mapping */
+	for (size_t i = 0; i < elf->ehdr.e_shnum; ++i)
+	{
+		ssize_t dst = elf->ehdr.e_shoff + elf->ehdr.e_shentsize * i;
+		if (lseek(elf->fd, dst, SEEK_SET) != dst)
+		{
+			puts("failed to seek shdr\n");
+			return 1;
+		}
+		if (read(elf->fd, &elf->shdr[i], sizeof(*elf->shdr)) != sizeof(*elf->shdr))
+		{
+			puts("failed to read shdr\n");
+			return 1;
+		}
+		if (elf->shdr[i].sh_type == SHT_DYNSYM)
+		{
+			if (elf->dynsym)
+			{
+				puts("multiple dynsym\n");
+				return 1;
+			}
+			elf->dynsym = &elf->shdr[i];
+		}
+	}
+	if (elf->shdr[elf->ehdr.e_shstrndx].sh_size >= sizeof(elf->shstrtab))
+	{
+		puts("shstrtab too long\n");
+		return 1;
+	}
+	ssize_t dst = elf->shdr[elf->ehdr.e_shstrndx].sh_offset;
+	if (lseek(elf->fd, dst, SEEK_SET) != dst)
+	{
+		puts("failed to seek shstrtab\n");
+		return 1;
+	}
+	ssize_t size = elf->shdr[elf->ehdr.e_shstrndx].sh_size;
+	if (read(elf->fd, &elf->shstrtab[0], size) != size)
+	{
+		puts("failed to read shstrtab\n");
+		return 1;
+	}
+	for (size_t i = 0; i < elf->ehdr.e_shnum; ++i)
+	{
+		const Elf32_Shdr *shdr = &elf->shdr[i];
+		if (shdr->sh_type != SHT_STRTAB)
+			continue;
+		if (shdr->sh_name >= elf->shdr[elf->ehdr.e_shstrndx].sh_size)
+			continue;
+		const char *name = &elf->shstrtab[shdr->sh_name];
+		if (strcmp(name, ".dynstr"))
+			continue;
+		if (elf->dynstr)
+		{
+			puts("multiple dynstr\n");
+			return 1;
+		}
+		elf->dynstr = &elf->shdr[i];
+	}
+	elf->addr = 0x200000 + 0x100000 * g_elf_nb; /* XXX use current mapping */
 	return 0;
 }
 
@@ -553,6 +603,11 @@ static int main(int argc, char **argv, char **envp, void **jmp)
 	if (argc < 1)
 	{
 		puts("no binary given\n");
+		return ret;
+	}
+	if (strlen(argv[0]) >= MAXPATHLEN)
+	{
+		puts("filepath too long\n");
 		return ret;
 	}
 	struct elf *elf = getelf();
@@ -594,12 +649,16 @@ void _start(int argc, char **argv, char **envp)
 	g_stdout = open("/dev/tty0", O_RDONLY);
 	if (g_stdout < 0)
 		exit(1);
+#ifdef DEBUG
 	puts("ld.so\n");
-	void *jmp;
+#endif
+	void *jmp = NULL;
 	int ret = main(argc, argv, envp, &jmp);
+#ifdef DEBUG
 	puts("ld.so end\n");
-	if (!ret)
-		((jmp_t)jmp)();
+#endif
 	close(g_stdout);
-	exit(ret);
+	if (ret)
+		exit(ret);
+	((jmp_t)jmp)();
 }

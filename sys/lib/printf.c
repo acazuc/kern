@@ -1,10 +1,10 @@
-#include "dev/tty/tty.h"
 #include <string.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <tty.h>
 
 #define FLAG_MINUS (1 << 0)
 #define FLAG_SPACE (1 << 2)
@@ -169,6 +169,14 @@ int vprintf(const char *fmt, va_list va_arg)
 	buf.size = sizeof(str);
 	buf.len = 0;
 	int ret = printf_buf(&buf, fmt, va_arg);
+#if 1
+	for (size_t i = 0; i < buf.len; ++i)
+	{
+		if (buf.data[i] == '\n')
+			com_putchar('\r');
+		com_putchar(buf.data[i]);
+	}
+#endif
 	tty_write(curtty, buf.data, strlen(buf.data)); /* always TTY0 ? */
 	return ret;
 }

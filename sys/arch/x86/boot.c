@@ -1,17 +1,13 @@
 #include "dev/pic/pic.h"
 #include "dev/pit/pit.h"
-#include "dev/vga/txt.h"
-#include "dev/vga/rgb.h"
+#include "dev/vga/vga.h"
 #include "dev/com/com.h"
 #include "dev/ps2/ps2.h"
 #include "dev/ide/ide.h"
-#include "dev/tty/tty.h"
 #include "dev/pci/pci.h"
 #include "dev/rtc/rtc.h"
 #include "dev/acpi/acpi.h"
 #include "dev/apic/apic.h"
-#include "arch/arch.h"
-#include "fs/vfs.h"
 #include "x86.h"
 #include "asm.h"
 #include "msr.h"
@@ -22,9 +18,13 @@
 #include <sys/file.h>
 #include <sys/proc.h>
 #include <inttypes.h>
+#include <sys/vmm.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 #include <stdio.h>
+#include <vfs.h>
+#include <tty.h>
 
 int g_isa_irq[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
 
@@ -292,7 +292,7 @@ static void tty_init(void)
 	{
 		char name[16];
 		snprintf(name, sizeof(name), "tty%" PRIu32, i);
-		int res = vga_txt_mktty(name, i, &ttys[i]); /* XXX: use rgb tty if any */
+		int res = vga_mktty(name, i, &ttys[i]); /* XXX: use rgb tty if any */
 		if (res)
 			printf("can't create %s: %s", name, strerror(res));
 	}
@@ -412,10 +412,10 @@ void kernel_main(struct multiboot_info *mb_info)
 		switch (mb_info->framebuffer_type)
 		{
 			case MULTIBOOT_FRAMEBUFFER_TYPE_EGA_TEXT:
-				vga_txt_init(mb_info->framebuffer_addr, mb_info->framebuffer_width, mb_info->framebuffer_height, mb_info->framebuffer_pitch);
+				vga_init(0, mb_info->framebuffer_addr, mb_info->framebuffer_width, mb_info->framebuffer_height, mb_info->framebuffer_pitch, 0);
 				break;
 			case MULTIBOOT_FRAMEBUFFER_TYPE_RGB:
-				vga_rgb_init(mb_info->framebuffer_addr, mb_info->framebuffer_width, mb_info->framebuffer_height, mb_info->framebuffer_pitch, mb_info->framebuffer_bpp); /* XXX: use mask & fields from mb_info ? */
+				vga_init(1, mb_info->framebuffer_addr, mb_info->framebuffer_width, mb_info->framebuffer_height, mb_info->framebuffer_pitch, mb_info->framebuffer_bpp); /* XXX: use mask & fields from mb_info ? */
 				break;
 			default:
 				panic("can't init vga\n");
@@ -424,7 +424,7 @@ void kernel_main(struct multiboot_info *mb_info)
 	}
 	else
 	{
-		vga_txt_init(0xB8000, 80, 25, 80 * 2);
+		vga_init(0, 0xB8000, 80, 25, 80 * 2, 0);
 	}
 	gdt_init();
 	idt_init();

@@ -1,12 +1,15 @@
 #include "devfs/devfs.h"
 #include "ramfs/ramfs.h"
-#include "vfs.h"
 
 #include <sys/proc.h>
 #include <sys/stat.h>
 #include <sys/pcpu.h>
+#include <sys/std.h>
 #include <string.h>
+#include <assert.h>
 #include <errno.h>
+#include <arch.h>
+#include <vfs.h>
 
 struct fs_node *g_vfs_root;
 

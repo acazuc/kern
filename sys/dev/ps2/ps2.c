@@ -1,13 +1,13 @@
 #include "ps2.h"
 #include "arch/x86/asm.h"
 #include "arch/x86/x86.h"
-#include "dev/tty/tty.h"
 
 #include <sys/utf8.h>
 #include <sys/kbd.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
+#include <tty.h>
 
 /* qwerty scan code set 1 table */
 static const enum kbd_key g_qwerty_table[128] =

@@ -1,7 +1,7 @@
 #ifndef DEVFS_H
 #define DEVFS_H
 
-#include "fs/vfs.h"
+#include <vfs.h>
 
 struct fs_cdev
 {

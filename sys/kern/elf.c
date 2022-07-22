@@ -1,14 +1,16 @@
 #include <sys/file.h>
 #include <inttypes.h>
+#include <sys/std.h>
+#include <sys/vmm.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 #include <errno.h>
 #include <stdio.h>
+#include <arch.h>
 #include <elf.h>
-
-#include "arch/arch.h"
-#include "fs/vfs.h"
+#include <vfs.h>
 
 struct elf_dynamic_ctx
 {
@@ -38,21 +40,20 @@ static void handle_dt_rel(struct elf_dynamic_ctx *ctx, const Elf32_Dyn *rel, con
 	{
 		const Elf32_Rel *r = (const Elf32_Rel*)&ctx->data[rel->d_un.d_ptr + i]; /* XXX test overflow */
 		uint32_t reladdr = ctx->base_addr + r->r_offset;
-		//printf("relocate at %" PRIx32 "\n", reladdr);
-		uint32_t addr = reladdr - reladdr % PAGE_SIZE;
-		size_t size = 8 + reladdr;
-		if (size % PAGE_SIZE < reladdr % PAGE_SIZE)
-			size = PAGE_SIZE * 2;
+		uint32_t map_addr = reladdr - reladdr % PAGE_SIZE;
+		size_t map_size = 8 + reladdr;
+		if (map_size % PAGE_SIZE < reladdr % PAGE_SIZE)
+			map_size = PAGE_SIZE * 2;
 		else
-			size = PAGE_SIZE;
+			map_size = PAGE_SIZE;
 		switch (ELF32_R_TYPE(r->r_info))
 		{
 			case R_386_RELATIVE:
 			{
-				void *ptr = vmap_user(ctx->vmm_ctx, (void*)addr, size);
+				void *ptr = vmap_user(ctx->vmm_ctx, (void*)map_addr, map_size);
 				assert(ptr, "can't vmap reloc\n");
-				*(uint32_t*)((uint8_t*)ptr + (reladdr - addr)) += ctx->base_addr;
-				vunmap(ptr, size);
+				*(uint32_t*)((uint8_t*)ptr + (reladdr - map_addr)) += ctx->base_addr;
+				vunmap(ptr, map_size);
 				break;
 			}
 			case R_386_JMP_SLOT:
@@ -61,10 +62,10 @@ static void handle_dt_rel(struct elf_dynamic_ctx *ctx, const Elf32_Dyn *rel, con
 				assert(ctx->strtab, "no strtab on jmpslot rel\n");
 				uint32_t symidx = ELF32_R_SYM(r->r_info);
 				const Elf32_Sym *sym = (const Elf32_Sym*)&ctx->data[ctx->symtab->d_un.d_ptr + symidx * ctx->syment->d_un.d_val]; /* XXX test overflow */
-				void *ptr = vmap_user(ctx->vmm_ctx, (void*)addr, size);
+				void *ptr = vmap_user(ctx->vmm_ctx, (void*)map_addr, map_size);
 				assert(ptr, "can't vmap reloc\n");
-				*(uint32_t*)((uint8_t*)ptr + (reladdr - addr)) = ctx->base_addr + sym->st_value;
-				vunmap(ptr, size);
+				*(uint32_t*)((uint8_t*)ptr + (reladdr - map_addr)) = ctx->base_addr + sym->st_value;
+				vunmap(ptr, map_size);
 				break;
 			}
 			case R_386_GLOB_DAT:
@@ -73,10 +74,10 @@ static void handle_dt_rel(struct elf_dynamic_ctx *ctx, const Elf32_Dyn *rel, con
 				assert(ctx->strtab, "no strtab on globdat rel\n");
 				uint32_t symidx = ELF32_R_SYM(r->r_info);
 				const Elf32_Sym *sym = (const Elf32_Sym*)&ctx->data[ctx->symtab->d_un.d_ptr + symidx * ctx->syment->d_un.d_val]; /* XXX test overflow */
-				void *ptr = vmap_user(ctx->vmm_ctx, (void*)addr, size);
+				void *ptr = vmap_user(ctx->vmm_ctx, (void*)map_addr, map_size);
 				assert(ptr, "can't vmap reloc\n");
-				*(uint32_t*)((uint8_t*)ptr + (reladdr - addr)) = ctx->base_addr + sym->st_value;
-				vunmap(ptr, size);
+				*(uint32_t*)((uint8_t*)ptr + (reladdr - map_addr)) = ctx->base_addr + sym->st_value;
+				vunmap(ptr, map_size);
 				break;
 			}
 			default:
@@ -185,15 +186,19 @@ static int createctx(struct file *file, struct vmm_ctx *vmm_ctx, void **entry, i
 	uint8_t *data = NULL;
 	size_t len = 0;
 	int r;
+	printf("reading file\n");
 	do
 	{
+		printf("realloc %p\n", data);
 		uint8_t *tmp = realloc(data, len + 4096, 0);
+		printf("isok %p\n", tmp);
 		assert(tmp, "can't allocate elf file data\n");
 		data = tmp;
 		r = file->op->read(file, data + len, 4096);
 		assert(r >= 0, "failed to read from elf file\n");
 		len += r;
 	} while (r > 0);
+	printf("read file\n");
 	assert(data, "no data has been read\n");
 	assert(len >= sizeof(Elf32_Ehdr), "file too short (no header)\n");
 	Elf32_Ehdr *hdr = (Elf32_Ehdr*)data;
@@ -229,6 +234,7 @@ static int createctx(struct file *file, struct vmm_ctx *vmm_ctx, void **entry, i
 
 	if (interp)
 	{
+		printf("interp found\n");
 		assert(!is_interp, "recursive interpreter not supported\n");
 		const char *path = (const char*)&data[interp->p_offset]; /* XXX check bounds */
 		if (memchr(path, '\0', interp->p_filesz) == NULL)
@@ -242,7 +248,9 @@ static int createctx(struct file *file, struct vmm_ctx *vmm_ctx, void **entry, i
 		interp_f->node = node;
 		interp_f->op = node->fop;
 		interp_f->refcount = 1;
+		printf("creating interp ctx\n");
 		int ret = createctx(interp_f, vmm_ctx, entry, 1);
+		printf("created interp ctx\n");
 		file_decref(interp_f);
 		free(data);
 		return ret;
