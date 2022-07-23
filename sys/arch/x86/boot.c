@@ -317,7 +317,7 @@ void ap_startup(void *p)
 {
 	uint32_t cpuid = curcpu();
 	printf("running ap %" PRIu32 "\n", cpuid);
-	while (1);
+	idle_loop();
 	char name[64];
 	snprintf(name, sizeof(name), "idle%" PRIu32, cpuid);
 	const char *argv[] = {"idle", NULL};
@@ -401,7 +401,6 @@ static void start_ap(void)
 
 void kernel_main(struct multiboot_info *mb_info)
 {
-	cli();
 	uint32_t mem_size = mb_get_memory_map_size(mb_info);
 	assert(mem_size, "can't get memory map\n");
 	assert(mem_size >= 0x1000000, "can't get 16MB of memory\n");

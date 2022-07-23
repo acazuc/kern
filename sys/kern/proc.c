@@ -54,7 +54,7 @@ static struct thread *proc_create(const char *name, struct vmm_ctx *vmm_ctx, voi
 	return thread;
 }
 
-static void insert_argv_envp(struct thread *thread, const char * const * argv, const char * const *envp)
+void proc_push_argv_envp(struct thread *thread, const char * const * argv, const char * const *envp)
 {
 	/* XXX: check bounds of stack for cpy */
 	/* XXX: don't map all the stack ? */
@@ -122,7 +122,7 @@ struct thread *uproc_create(const char *name, void *entry, const char * const *a
 		return NULL;
 	}
 	init_trapframe_user(thread);
-	insert_argv_envp(thread, argv, envp);
+	proc_push_argv_envp(thread, argv, envp);
 	return thread;
 }
 
@@ -137,7 +137,7 @@ struct thread *kproc_create(const char *name, void *entry, const char * const *a
 		return NULL;
 	}
 	init_trapframe_kern(thread);
-	insert_argv_envp(thread, argv, envp);
+	proc_push_argv_envp(thread, argv, envp);
 	return thread;
 }
 
@@ -154,7 +154,7 @@ struct thread *uproc_create_elf(const char *name, struct file *file, const char 
 		return NULL;
 	}
 	init_trapframe_user(thread);
-	insert_argv_envp(thread, argv, envp);
+	proc_push_argv_envp(thread, argv, envp);
 	return thread;
 }
 

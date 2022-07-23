@@ -32,6 +32,13 @@ static int verify_userstr(const char *str)
 	return 1;
 }
 
+static int verify_userstra(const char *const *array)
+{
+	/* XXX */
+	(void)array;
+	return 1;
+}
+
 static int sys_exit(int code)
 {
 	struct thread *oldthread = curthread;
@@ -444,7 +451,7 @@ static int sys_getdents(int fd, struct sys_dirent *dirp, size_t count)
 
 static int sys_execve(const char *pathname, const char *const *argv, const char *const *envp)
 {
-	if (!verify_userstr(pathname))
+	if (!verify_userstr(pathname) || !verify_userstra(argv) || !verify_userstra(envp))
 		return -EFAULT;
 	/* XXX: argv, envpn */
 	struct fs_node *node;
@@ -465,6 +472,7 @@ static int sys_execve(const char *pathname, const char *const *argv, const char 
 			return -ret;
 		}
 	}
+	/* XXX move everything below to proc.h */
 	/* XXX better way to do this */
 	struct vmm_ctx *vmm_ctx = vmm_ctx_create();
 	if (!vmm_ctx)
@@ -473,9 +481,7 @@ static int sys_execve(const char *pathname, const char *const *argv, const char 
 		return -ENOMEM;
 	}
 	void *entry;
-	printf("creating elf ctx\n");
 	ret = elf_createctx(&file, vmm_ctx, &entry);
-	printf("created elf ctx\n");
 	if (ret)
 	{
 		file_decref(&file);
@@ -485,7 +491,8 @@ static int sys_execve(const char *pathname, const char *const *argv, const char 
 	vmm_ctx_delete(curthread->proc->vmm_ctx);
 	curthread->proc->vmm_ctx = vmm_ctx;
 	curthread->stack = vmalloc_user(curthread->proc->vmm_ctx, (void*)(0xC0000000 - curthread->stack_size), curthread->stack_size); /* XXX ASLR */
-	curthread->tf.esp = (uint32_t)&curthread->stack[curthread->stack_size];
+	init_trapframe_user(curthread);
+	proc_push_argv_envp(curthread, argv, envp);
 	curthread->tf.eip = (uint32_t)entry;
 	return 0;
 }

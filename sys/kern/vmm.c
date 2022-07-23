@@ -18,7 +18,7 @@ int vmm_get_free_range(struct vmm_region *region, size_t addr, size_t size, size
 			region->range_0.size = region->size - size;
 			TAILQ_INSERT_HEAD(&region->ranges, &region->range_0, chain);
 			*ret = region->addr;
-			return 0;
+			goto end;
 		}
 		if (addr + size == region->addr + region->size)
 		{
@@ -26,7 +26,7 @@ int vmm_get_free_range(struct vmm_region *region, size_t addr, size_t size, size
 			region->range_0.size = region->size - size;
 			TAILQ_INSERT_HEAD(&region->ranges, &region->range_0, chain);
 			*ret = region->addr + region->size - size;
-			return 0;
+			goto end;
 		}
 		struct vmm_range *range = malloc(sizeof(*range), 0);
 		assert(range, "can't allocate new range\n");
@@ -37,7 +37,7 @@ int vmm_get_free_range(struct vmm_region *region, size_t addr, size_t size, size
 		region->range_0.size = region->addr + region->size - region->range_0.addr;
 		TAILQ_INSERT_HEAD(&region->ranges, &region->range_0, chain);
 		*ret = addr;
-		return 0;
+		goto end;
 	}
 	struct vmm_range *item;
 	if (addr)
@@ -58,20 +58,20 @@ int vmm_get_free_range(struct vmm_region *region, size_t addr, size_t size, size
 				if (item != &region->range_0)
 					free(item);
 				*ret = addr;
-				return 0;
+				goto end;
 			}
 			if (addr == item->addr)
 			{
 				item->addr += size;
 				item->size -= size;
 				*ret = addr;
-				return 0;
+				goto end;
 			}
 			if (addr + size == item->addr + item->size)
 			{
 				item->size -= size;
 				*ret = addr;
-				return 0;
+				goto end;
 			}
 			struct vmm_range *newr = malloc(sizeof(*newr), 0);
 			assert(newr, "can't allocate new range\n");
@@ -80,7 +80,7 @@ int vmm_get_free_range(struct vmm_region *region, size_t addr, size_t size, size
 			TAILQ_INSERT_AFTER(&region->ranges, item, newr, chain);
 			item->size = addr - item->addr;
 			*ret = addr;
-			return 0;
+			goto end;
 		}
 	}
 	else
@@ -101,10 +101,13 @@ int vmm_get_free_range(struct vmm_region *region, size_t addr, size_t size, size
 				item->addr += size;
 				item->size -= size;
 			}
-			return 0;
+			goto end;
 		}
 	}
 	return ENOMEM;
+
+end:
+	return 0;
 }
 
 /* same sad code sa above */
@@ -127,7 +130,7 @@ void vmm_set_free_range(struct vmm_region *region, size_t addr, size_t size)
 			struct vmm_range *prev = TAILQ_PREV(item, vmm_range_head, chain);
 			if (!prev)
 				return;
-			if (prev->addr + size != addr)
+			if (prev->addr + prev->size != addr)
 				return;
 			prev->size += item->size;
 			TAILQ_REMOVE(&region->ranges, item, chain);

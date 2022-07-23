@@ -1,9 +1,6 @@
 #include <ld.h>
 #include <elf.h>
 
-#define PAGE_SIZE 4096 /* XXX in header */
-#define MAXPATHLEN 1024 /* XXX in header */
-
 #if 0
 #define DEBUG
 #endif
@@ -567,7 +564,14 @@ static int elf_read(struct elf *elf)
 		}
 		elf->dynstr = &elf->shdr[i];
 	}
-	elf->addr = 0x200000 + 0x100000 * g_elf_nb; /* XXX use current mapping */
+	elf->addr = 0x200000 + 0x100000 * g_elf_nb;
+	/* XXX
+	 * it should be check of much memory is taken for the given elf
+	 * (max PT_LOAD - min PT_LOAD) and inc by this much
+	 *
+	 * ld.so should also be moved to somewhere else in the memory in the following order:
+	 * binary, heap, dep 2, dep 1, ld.so, stack, kernel
+	 */
 	return 0;
 }
 
@@ -642,7 +646,7 @@ end:
 	return ret;
 }
 
-typedef void (*jmp_t)(void);
+typedef void (*jmp_t)(int argc, char **argv, char **envp);
 
 void _start(int argc, char **argv, char **envp)
 {
@@ -660,5 +664,5 @@ void _start(int argc, char **argv, char **envp)
 	close(g_stdout);
 	if (ret)
 		exit(ret);
-	((jmp_t)jmp)();
+	((jmp_t)jmp)(argc, argv, envp);
 }

@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <ctype.h>
 
 #define FLAG_MINUS (1 << 0)
@@ -72,16 +73,10 @@ static void putstr(struct printf_buf *buf, const char *s)
 		putchar(buf, s[i]);
 }
 
-static void print_spaces(struct printf_buf *buf, size_t n)
+static void putchars(struct printf_buf *buf, char c, size_t n)
 {
 	for (size_t i = 0; i < n; ++i)
-		putchar(buf, ' ');
-}
-
-static void print_zeros(struct printf_buf *buf, size_t n)
-{
-	for (size_t i = 0; i < n; ++i)
-		putchar(buf, '0');
+		putchar(buf, c);
 }
 
 #if 0
@@ -168,7 +163,7 @@ int vprintf(const char *fmt, va_list va_arg)
 	buf.size = sizeof(str);
 	buf.len = 0;
 	int ret = printf_buf(&buf, fmt, va_arg);
-	write(1, buf.data, buf.len);
+	write(1, buf.data, strlen(buf.data));
 	return ret;
 }
 
@@ -304,34 +299,30 @@ static int parse_arg(struct arg *arg, const char *fmt, size_t *i)
 		return 0;
 	parse_length(arg, fmt, i);
 	arg->type = fmt[*i];
+	if (arg->flags & FLAG_MINUS)
+		arg->flags &= ~FLAG_ZERO;
 	return 1;
 }
 
 static void print_str(struct printf_buf *buf, struct arg *arg, const char *prefix, const char *s)
 {
 	size_t len = strlen(s);
-	size_t prefix_len;
-	if (prefix)
-	{
-		putstr(buf, prefix);
-		prefix_len = strlen(prefix);
-	}
+	size_t prefix_len = prefix ? strlen(prefix) : 0;
+	size_t pad_len;
+
+	if (arg->width > 0 && (size_t)arg->width > len + prefix_len)
+		pad_len = arg->width - len - prefix_len;
 	else
-	{
-		prefix_len = 0;
-	}
-	if (arg->width > 0)
-	{
-		size_t width = arg->width;
-		if (width > len + prefix_len)
-		{
-			if (arg->flags & FLAG_ZERO)
-				print_zeros(buf, width - len - prefix_len);
-			else
-				print_spaces(buf, width - len - prefix_len);
-		}
-	}
+		pad_len = 0;
+	if (pad_len && !(arg->flags & (FLAG_ZERO | FLAG_MINUS)))
+			putchars(buf, ' ', pad_len);
+	if (prefix)
+		putstr(buf, prefix);
+	if (pad_len && (arg->flags & FLAG_ZERO))
+		putchars(buf, '0', pad_len);
 	putstr(buf, s);
+	if (pad_len && (arg->flags & FLAG_MINUS))
+		putchars(buf, ' ', pad_len);
 }
 
 static void print_c(struct printf_buf *buf, struct arg *arg)
@@ -340,15 +331,7 @@ static void print_c(struct printf_buf *buf, struct arg *arg)
 
 	vals[0] = (unsigned char)va_arg(*arg->va_arg, int);
 	vals[1] = '\0';
-#if 0
-	if (arg->width > 0 && !(arg->flags & FLAG_MINUS))
-		print_spaces(buf, arg->width - 1);
-#endif
 	print_str(buf, arg, NULL, (char*)&vals[0]);
-#if 0
-	if (arg->width > 0 && (arg->flags & FLAG_MINUS))
-		print_spaces(buf, arg->width - 1);
-#endif
 }
 
 static void print_d(struct printf_buf *buf, struct arg *arg)
@@ -358,23 +341,7 @@ static void print_d(struct printf_buf *buf, struct arg *arg)
 
 	val = get_int_val(arg);
 	lltoa(str, val);
-#if 0
-	if ((arg->flags & FLAG_PLUS) && val >= 0)
-	{
-		if (!(str = ft_strjoin_free2("+", str)))
-			return ;
-	}
-	len = strlen(str);
-	if (!(arg->flags & FLAG_MINUS))
-		print_argument_spaces(arg, len);
-	if (arg->preci > 0 && (size_t)arg->preci > len)
-		print_zeros(argument->preci - len);
-#endif
 	print_str(buf, arg, NULL, str);
-#if 0
-	if (arg->flags & FLAG_MINUS)
-		print_argument_spaces(argument, len);
-#endif
 }
 
 static void print_i(struct printf_buf *buf, struct arg *arg)
@@ -386,27 +353,15 @@ static void print_o(struct printf_buf *buf, struct arg *arg)
 {
 	char str[64];
 	unsigned long long int val;
+	const char *prefix;
 
 	val = get_uint_val(arg);
 	ulltoa_base(str, val, "01234567");
-#if 0
-	if (arg->flags->sharp && !(str = ft_strjoin_free2("0", str)))
-		return;
-	len = strlen(str);
-	if (!(arg->flags-> & FLAG_MINUS) && argument->width > 0
-			&& ((arg->preci <= 0 && (size_t)arg->width > len)
-				|| (arg->preci >= 1 && (size_t)arg->width > MAX((size_t)arg->preci, len))))
-		print_spaces(buf, arg->width - (arg->preci <= 0 ? len : MAX((size_t)arg->preci, len)));
-	if (arg->preci > 0 && (size_t)arg->preci > len)
-		print_zeros(buf, arg->preci - len);
-#endif
-	print_str(buf, arg, NULL, str);
-#if 0
-	if ((arg->flags & FLAG_MINUS) && argument->width > 0
-			&& ((arg->preci <= 0 && (size_t)argument->width > len)
-				|| (arg->preci >= 1 && (size_t)argument->width > MAX((size_t)argument->preci, len))))
-		print_spaces(buf, arg->width - (argument->preci <= 0 ? len : MAX((size_t)argument->preci, len)));
-#endif
+	if (val && (arg->flags & FLAG_SHARP))
+		prefix = "0";
+	else
+		prefix = NULL;
+	print_str(buf, arg, prefix, str);
 }
 
 static void print_s(struct printf_buf *buf, struct arg *arg)
@@ -416,26 +371,7 @@ static void print_s(struct printf_buf *buf, struct arg *arg)
 	str = va_arg(*arg->va_arg, char*);
 	if (!str)
 		str = "(null)";
-#if 0
-	len = strlen(str);
-	cut = 0;
-	if ((size_t)arg->preci < len)
-	{
-		cut = 1;
-		if (!(str = ft_strsub(str, 0, arg->preci)))
-			return;
-	}
-	len = strlen(str);
-	if (!(arg->flags & FLAG_MINUS) && arg->width > 0 && (size_t)arg->width > len)
-		print_spaces(buf, arg->width - len);
-#endif
 	print_str(buf, arg, NULL, str);
-#if 0
-	if ((arg->flags & FLAG_MINUS) && arg->width > 0 && (size_t)arg->width > len)
-		print_spaces(arg->width - len);
-	if (cut)
-		free(str);
-#endif
 }
 
 static void print_u(struct printf_buf *buf, struct arg *arg)
@@ -445,22 +381,7 @@ static void print_u(struct printf_buf *buf, struct arg *arg)
 
 	val = get_uint_val(arg);
 	ulltoa(str, val);
-#if 0
-	len = strlen(str);
-	if (!(arg->flags & FLAG_MINUS) && arg->width > 0
-			&& ((arg->preci <= 0 && (size_t)arg->width > len)
-				|| (arg->preci >= 1 && (size_t)arg->width > MAX((size_t)arg->preci, len))))
-		print_spaces(buf, arg->width - (arg->preci <= 0 ? len : MAX((size_t)arg->preci, len)));
-	if (arg->preci > 0 && (size_t)arg->preci > len)
-		print_zeros(buf, argument->preci - len);
-#endif
 	print_str(buf, arg, NULL, str);
-#if 0
-	if ((arg->flags & FLAG_MINUS) && argument->width > 0
-			&& ((arg->preci <= 0 && (size_t)arg->width > len)
-				|| (arg->preci >= 1 && (size_t)arg->width > MAX((size_t)arg->preci, len))))
-		print_spaces(buf, arg->width - (arg->preci <= 0 ? len : MAX((size_t)arg->preci, len)));
-#endif
 }
 
 static char *get_x_chars(struct arg *arg)
@@ -474,31 +395,15 @@ static void print_x(struct printf_buf *buf, struct arg *arg)
 {
 	char str[64];
 	unsigned long long int val;
+	const char *prefix;
 
 	val = get_uint_val(arg);
 	ulltoa_base(str, val, get_x_chars(arg));
-#if 0
-	len = strlen(str);
-	if (arg->flags & FLAG_SHARP)
-	{
-		len += 2;
-		str = ft_strjoin_free2("0x", str);
-		return;
-	}
-	if (!(arg->flags & FLAG_SHARP) && arg->width > 0
-			&& ((arg->preci <= 0 && (size_t)arg->width > len)
-				|| (arg->preci >= 1 && (size_t)arg->width > MAX((size_t)arg->preci, len))))
-		print_spaces(buf, arg->width - (arg->preci <= 0 ? len : MAX((size_t)arg->preci, len)));
-	if (arg->preci > 0 && (size_t)arg->preci > len)
-		print_zeros(buf, arg->preci - len);
-#endif
-	print_str(buf, arg, (arg->flags & FLAG_SHARP) ? "0x" : NULL, str);
-#if 0
-	if ((arg->flags & FLAG_SHARP) && arg->width > 0
-			&& ((arg->preci <= 0 && (size_t)arg->width > len)
-				|| (arg->preci >= 1 && (size_t)arg->width > MAX((size_t)arg->preci, len))))
-		print_spaces(buf, arg->width - (arg->preci <= 0 ? len : MAX((size_t)arg->preci, len)));
-#endif
+	if (val && (arg->flags & FLAG_SHARP))
+		prefix = (arg->type == 'X' ? "0X" : "0x");
+	else
+		prefix = NULL;
+	print_str(buf, arg, prefix, str);
 }
 
 static void print_X(struct printf_buf *buf, struct arg *arg)

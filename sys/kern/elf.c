@@ -186,19 +186,15 @@ static int createctx(struct file *file, struct vmm_ctx *vmm_ctx, void **entry, i
 	uint8_t *data = NULL;
 	size_t len = 0;
 	int r;
-	printf("reading file\n");
 	do
 	{
-		printf("realloc %p\n", data);
 		uint8_t *tmp = realloc(data, len + 4096, 0);
-		printf("isok %p\n", tmp);
 		assert(tmp, "can't allocate elf file data\n");
 		data = tmp;
 		r = file->op->read(file, data + len, 4096);
 		assert(r >= 0, "failed to read from elf file\n");
 		len += r;
 	} while (r > 0);
-	printf("read file\n");
 	assert(data, "no data has been read\n");
 	assert(len >= sizeof(Elf32_Ehdr), "file too short (no header)\n");
 	Elf32_Ehdr *hdr = (Elf32_Ehdr*)data;
@@ -234,7 +230,6 @@ static int createctx(struct file *file, struct vmm_ctx *vmm_ctx, void **entry, i
 
 	if (interp)
 	{
-		printf("interp found\n");
 		assert(!is_interp, "recursive interpreter not supported\n");
 		const char *path = (const char*)&data[interp->p_offset]; /* XXX check bounds */
 		if (memchr(path, '\0', interp->p_filesz) == NULL)
@@ -248,9 +243,7 @@ static int createctx(struct file *file, struct vmm_ctx *vmm_ctx, void **entry, i
 		interp_f->node = node;
 		interp_f->op = node->fop;
 		interp_f->refcount = 1;
-		printf("creating interp ctx\n");
 		int ret = createctx(interp_f, vmm_ctx, entry, 1);
-		printf("created interp ctx\n");
 		file_decref(interp_f);
 		free(data);
 		return ret;

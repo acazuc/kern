@@ -1,17 +1,10 @@
 #ifndef STDARG_H
 #define STDARG_H
 
-#if defined(i386) || defined(__i386__) || defined(__i386) || defined(_M_IX86)
+typedef __builtin_va_list va_list;
 
-typedef char *va_list;
-
-#define va_rsize(T) ((sizeof(T) + 3) & ~3)
-#define va_start(ap, lastarg) (ap = ((char*)&lastarg + va_rsize(lastarg)))
-#define va_end(ap)
-#define va_arg(ap, T) (ap += va_rsize(T), *((T*)(ap - va_rsize(T))))
-
-#else
-# error "unknown arch"
-#endif
+#define va_start(ap, lastarg) __builtin_va_start(ap, lastarg)
+#define va_end(ap) __builtin_va_end(ap)
+#define va_arg(ap, T) __builtin_va_arg(ap, T)
 
 #endif

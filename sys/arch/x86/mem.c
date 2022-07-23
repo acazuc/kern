@@ -191,8 +191,8 @@ static void vmm_alloc_page(struct vmm_ctx *ctx, uint32_t addr, int user)
 	}
 	uint32_t tbl_id = TBL_ID(addr);
 	uint32_t *tbl = &tbl_ptr[tbl_id];
-	assert(!(*tbl & TBL_FLAG_P), "vmalloc already created page 0x%" PRIx32 "\n", addr);
-	assert(!(*tbl & TBL_FLAG_V), "vmalloc already allocated page 0x%" PRIx32 "\n", addr);
+	assert(!(*tbl & TBL_FLAG_P), "vmalloc already created page 0x%" PRIx32 ", 0x%" PRIx32 "\n", addr, *tbl);
+	assert(!(*tbl & TBL_FLAG_V), "vmalloc already allocated page 0x%" PRIx32 ", 0x%" PRIx32 "\n", addr, *tbl);
 	uint32_t f = TBL_FLAG_V;
 	if (user)
 		f |= TBL_FLAG_US;
@@ -475,9 +475,9 @@ void vunmap(void *ptr, size_t size)
 	uint32_t addr = (uint32_t)ptr;
 	assert(!(addr & PAGE_MASK), "vunmap unaligned addr 0x%" PRIx32 "\n", addr);
 	assert(!(size & PAGE_MASK), "vunmap unaligned size 0x%" PRIx32 "\n", size);
-	vmm_set_free_range(&g_vmm_heap, addr, size);
 	for (uint32_t i = 0; i < size; i += PAGE_SIZE)
 		vmm_unmap_page(addr + i);
+	vmm_set_free_range(&g_vmm_heap, addr, size);
 }
 
 static void init_physical_maps(void)

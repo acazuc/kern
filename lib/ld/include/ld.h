@@ -109,6 +109,9 @@ typedef int32_t id_t;
 #define SEEK_CUR 1
 #define SEEK_END 2
 
+#define PAGE_SIZE 4096
+#define MAXPATHLEN 1024
+
 #else
 # error "unknown arch"
 #endif

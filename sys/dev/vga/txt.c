@@ -209,7 +209,7 @@ static int vga_tty_read(struct tty *tty, void *data, size_t len)
 
 static void scroll_up(void)
 {
-	for (size_t y = 1; y < g_vga_txt.vga.height; ++y)
+	for (size_t y = 0; y < g_vga_txt.vga.height - 1; ++y)
 		memcpy(&g_vga_txt.addr[y * g_vga_txt.vga.pitch], &g_vga_txt.addr[(y + 1) * g_vga_txt.vga.pitch], g_vga_txt.vga.pitch);
 	memset(&g_vga_txt.addr[(g_vga_txt.vga.height - 1) * g_vga_txt.vga.pitch], 0, g_vga_txt.vga.pitch);
 }

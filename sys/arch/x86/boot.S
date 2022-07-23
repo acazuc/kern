@@ -33,6 +33,7 @@ user_tbl:
 .global _start
 .type _start, @function
 _start:
+	cli
 	#setup kern tbl
 	mov $3, %eax
 	mov $kern_tbl, %edi

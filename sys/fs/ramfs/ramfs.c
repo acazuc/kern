@@ -18,13 +18,16 @@
 static int dir_lookup(struct fs_node *node, const char *name, uint32_t namelen, struct fs_node **child);
 static int dir_readdir(struct fs_node *node, struct fs_readdir_ctx *ctx);
 
+#define BIN_SYMBOL(name, suffix) _binary____bin_##name##_##name##_##suffix
+#define LIB_SYMBOL(name, suffix) _binary____lib_##name##_##name##_so_##suffix
+
 #define BIN_DEF(bin) \
-extern uint8_t _binary_bin_##bin##_##bin##_start; \
-extern uint8_t _binary_bin_##bin##_##bin##_end;
+extern uint8_t BIN_SYMBOL(bin, start); \
+extern uint8_t BIN_SYMBOL(bin, end);
 
 #define LIB_DEF(lib) \
-extern uint8_t _binary_lib_##lib##_##lib##_so_start; \
-extern uint8_t _binary_lib_##lib##_##lib##_so_end;
+extern uint8_t LIB_SYMBOL(lib, start); \
+extern uint8_t LIB_SYMBOL(lib, end);
 
 BIN_DEF(sh);
 BIN_DEF(cat);
@@ -255,20 +258,20 @@ struct fs_sb *ramfs_init(void)
 	struct ramfs_dir *bin = mkdir(root, "bin");
 	struct ramfs_dir *lib = mkdir(root, "lib");
 	struct ramfs_reg *sh = mkreg(bin, "sh");
-	sh->data = &_binary_bin_sh_sh_start;
-	sh->size = &_binary_bin_sh_sh_end - &_binary_bin_sh_sh_start;
+	sh->data = &BIN_SYMBOL(sh, start);
+	sh->size = &BIN_SYMBOL(sh, end) - sh->data;
 	struct ramfs_reg *cat = mkreg(bin, "cat");
-	cat->data = &_binary_bin_cat_cat_start;
-	cat->size = &_binary_bin_cat_cat_end - &_binary_bin_cat_cat_start;
+	cat->data = &BIN_SYMBOL(cat, start);
+	cat->size = &BIN_SYMBOL(cat, end) - cat->data;
 	struct ramfs_reg *init = mkreg(bin, "init");
-	init->data = &_binary_bin_init_init_start;
-	init->size = &_binary_bin_init_init_end - &_binary_bin_init_init_start;
+	init->data = &BIN_SYMBOL(init, start);
+	init->size = &BIN_SYMBOL(init, end) - init->data;
 	struct ramfs_reg *libc = mkreg(lib, "libc.so");
-	libc->data = &_binary_lib_libc_libc_so_start;
-	libc->size = &_binary_lib_libc_libc_so_end - &_binary_lib_libc_libc_so_start;
+	libc->data = &LIB_SYMBOL(libc, start);
+	libc->size = &LIB_SYMBOL(libc, end) - libc->data;
 	struct ramfs_reg *ld = mkreg(lib, "ld.so");
-	ld->data = &_binary_lib_ld_ld_so_start;
-	ld->size = &_binary_lib_ld_ld_so_end - &_binary_lib_ld_ld_so_start;
+	ld->data = &LIB_SYMBOL(ld, start);
+	ld->size = &LIB_SYMBOL(ld, end) - ld->data;
 	g_sb.root = &root->node.node;
 	return &g_sb;
 }

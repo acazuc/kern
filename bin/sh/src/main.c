@@ -117,7 +117,10 @@ static void exec_line(const char *line)
 		write(g_fd, "parent\n", 7);
 		return;
 	}
-	execve("/bin/sh", NULL, NULL);
+	const char *bin = line;
+	const char *argv[] = {bin, NULL};
+	const char *null = NULL;
+	execve(bin, argv, &null);
 	write(g_fd, "failed to exec /bin/sh\n", 23);
 	exit(0);
 }
@@ -161,7 +164,7 @@ int main(int ac, char **av, char **ev)
 loop: goto loop;
 }
 
-void _start(void)
+void _start(int argc, char **argv, char **envp)
 {
-	exit(main(0, NULL, NULL));
+	exit(main(argc, argv, envp));
 }
