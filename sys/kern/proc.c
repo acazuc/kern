@@ -174,7 +174,7 @@ struct thread *proc_fork(struct thread *thread)
 	{
 		newp->files[i] = proc->files[i];
 		if (newp->files[i])
-			newp->files[i]->refcount++;
+			file_incref(newp->files[i]);
 	}
 	newp->files_nb = proc->files_nb;
 	newp->root = proc->root;

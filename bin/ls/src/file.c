@@ -124,25 +124,26 @@ static void load_perms(struct file *file, mode_t mode)
 
 static void setinfos(struct env *env, struct file *file, struct stat *info)
 {
-	file->user = "";
-	file->group = "";
-#if 0
-	struct passwd *pw;
-	struct group *gr;
-
 	if (env->opt_n)
 	{
-		file->user = ft_itoa(info->st_uid);
-		file->group = ft_itoa(info->st_gid);
+		char tmp[16];
+		snprintf(tmp, sizeof(tmp), "%ld", info->st_uid);
+		file->user = strdup(tmp);
+		snprintf(tmp, sizeof(tmp), "%ld", info->st_gid);
+		file->group = strdup(tmp);
 	}
 	else
 	{
-		pw = getpwuid(info->st_uid);
-		gr = getgrgid(info->st_gid);
+#if 0
+		struct passwd *pw = getpwuid(info->st_uid);
+		struct group *gr = getgrgid(info->st_gid);
 		file->user = ft_strdup(pw->pw_name ? pw->pw_name : "");
 		file->group = ft_strdup(gr->gr_name ? gr->gr_name : "");
-	}
+#else
+		file->user = strdup("user");
+		file->user = strdup("group");
 #endif
+	}
 	load_perms(file, info->st_mode);
 	if (file->perms[0] == 'c' || file->perms[0] == 'b')
 		snprintf(file->size, sizeof(file->size), "%3d, %3d", (int)major(info->st_rdev), (int)minor(info->st_rdev));
@@ -156,19 +157,19 @@ static int load_symb(struct env *env, struct file *file, struct stat *info, cons
 	ssize_t r;
 	char *linkname;
 
-	if (!(linkname = malloc(info->st_size + 1)))
+	linkname = malloc(info->st_size + 1);
+	if (!linkname)
 	{
-		fprintf(stderr, "linkname allocation failed: %s\n", strerror(errno));
+		perror("ls: linkname allocation failed");
 		exit(EXIT_FAILURE);
 	}
 	r = readlink(rpath, linkname, info->st_size + 1);
 	if (r < 0)
 	{
-		fprintf(stderr, "failed to read link: %s\n", strerror(errno));
+		perror("ls: failed to read link");
 		exit(EXIT_FAILURE);
 	}
 	linkname[info->st_size] = '\0';
-	//file->is_dir = S_ISDIR(info->st_mode);
 	if (env->opt_l)
 	{
 		file->lnk_name = linkname;
@@ -195,7 +196,7 @@ void load_file(struct env *env, struct file *file, const char *name, struct dir 
 		snprintf(path, sizeof(path), "%s/%s", dir->path, name);
 	if (stat(path, &ninfo) == -1)
 	{
-		fprintf(stderr, "failed to stat file\n");
+		perror("ls: failed to stat file");
 		exit(EXIT_FAILURE);
 	}
 	is_lnk = (lstat(path, &linfo) == 0) && (ninfo.st_ino != linfo.st_ino);

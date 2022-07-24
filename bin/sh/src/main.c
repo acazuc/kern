@@ -47,7 +47,6 @@ static void exec_line(const char *line)
 	}
 	if (!strncmp(line, "ls", 2))
 	{
-		char buffer[128];
 		line += 2;
 		if (*line == ' ')
 			line++;

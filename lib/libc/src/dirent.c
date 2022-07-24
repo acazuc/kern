@@ -6,6 +6,15 @@
 #include <string.h>
 #include <fcntl.h>
 
+struct DIR
+{
+	int fd;
+	char buf[4096];
+	size_t buf_pos;
+	size_t buf_end;
+	struct dirent *dirent;
+};
+
 DIR *opendir(const char *name)
 {
 	DIR *dir = malloc(sizeof(*dir));

@@ -11,7 +11,6 @@ static void usage(void)
 
 int main(int argc, char **argv, char **envp)
 {
-	printf("there\n");
 	struct env env;
 	char c;
 
@@ -100,8 +99,10 @@ int main(int argc, char **argv, char **envp)
 				return EXIT_FAILURE;
 		}
 	}
+	/* XXX remove debug opt */
 	env.opt_l = 1;
 	env.opt_a = 1;
+	env.opt_n = 1;
 	parse_sources(&env, argc - optind, &argv[optind]);
 	return EXIT_SUCCESS;
 }

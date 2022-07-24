@@ -29,14 +29,14 @@ int exit(int error_code)
 	return ret;
 }
 
-int read(int fd, void *buffer, size_t count)
+ssize_t read(int fd, void *buffer, size_t count)
 {
 	int32_t ret = syscall(SYS_READ, fd, (uint32_t)buffer, count, 0, 0, 0);
 	TRANSFORM_ERRNO(ret);
 	return ret;
 }
 
-int write(int fd, const void *buffer, size_t count)
+ssize_t write(int fd, const void *buffer, size_t count)
 {
 	int32_t ret = syscall(SYS_WRITE, fd, (uint32_t)buffer, count, 0, 0, 0);
 	TRANSFORM_ERRNO(ret);
@@ -74,7 +74,7 @@ int close(int fd)
 	return ret;
 }
 
-int lseek(int fd, off_t off, int whence)
+off_t lseek(int fd, off_t off, int whence)
 {
 	int32_t ret = syscall(SYS_LSEEK, fd, off, whence, 0, 0, 0);
 	TRANSFORM_ERRNO(ret);

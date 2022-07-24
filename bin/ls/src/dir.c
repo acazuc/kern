@@ -77,7 +77,7 @@ void dir_add_file(struct env *env, struct dir *dir, const char *name)
 	file = malloc(sizeof(*file));
 	if (!file)
 	{
-		fprintf(stderr, "file allocation failed: %s\n", strerror(errno));
+		perror("ls: file allocation failed");
 		exit(EXIT_FAILURE);
 	}
 	load_file(env, file, name, dir);
@@ -107,7 +107,7 @@ struct dir *load_dir(struct env *env, const char *path)
 	dir = malloc(sizeof(*dir));
 	if (!dir)
 	{
-		fprintf(stderr, "dir allocation failed\n");
+		perror("ls: dir allocation failed\n");
 		exit(EXIT_FAILURE);
 	}
 	dir_init(dir, path);

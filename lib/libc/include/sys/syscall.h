@@ -18,10 +18,13 @@
 
 #define SYS_FSTAT     28
 
+#define SYS_DUP       41
+
 #define SYS_IOCTL     54
 
 #define SYS_SETPGID   57
 
+#define SYS_DUP2      63
 #define SYS_GETPPID   64
 #define SYS_GETPGRP   65
 #define SYS_SETSID    66

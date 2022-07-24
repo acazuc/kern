@@ -21,6 +21,7 @@ int main(int argc, char **argv, char **envp)
 	}
 	if (pid == 0)
 	{
+		/* XXX */
 		while (1);
 	}
 	char * const sh_argv[] = {"/bin/sh", NULL};

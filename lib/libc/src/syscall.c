@@ -119,3 +119,18 @@ int munmap(void *addr, size_t len)
 {
 	return basic_syscall(SYS_MUNMAP, (uint32_t)addr, len, 0, 0, 0, 0);
 }
+
+int dup(int oldfd)
+{
+	return basic_syscall(SYS_DUP, oldfd, 0, 0, 0, 0, 0);
+}
+
+int dup2(int oldfd, int newfd)
+{
+	return basic_syscall(SYS_DUP2, oldfd, newfd, 0, 0, 0, 0);
+}
+
+off_t lseek(int fd, off_t offset, int whence)
+{
+	return basic_syscall(SYS_LSEEK, fd, offset, whence, 0, 0, 0);
+}

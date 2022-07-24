@@ -73,7 +73,7 @@ static void push_source(struct env *env, char *path, char *display_path , struct
 	new = malloc(sizeof(*new));
 	if (!new)
 	{
-		fprintf(stderr, "source allocation failed: %s\n", strerror(errno));
+		perror("ls: source allocation failed");
 		exit(EXIT_FAILURE);
 	}
 	new->display_path = display_path;
@@ -89,7 +89,7 @@ static int add_source(struct env *env, char *path, struct dir *dir , char *displ
 
 	if (stat(path, &info) == -1 && lstat(path, &linfo) == -1)
 	{
-		fprintf(stderr, "stat failed: %s\n", strerror(errno));
+		perror("ls: stat failed");
 		return 0;
 	}
 	if (S_ISDIR(info.st_mode) && (!env->opt_l || S_ISDIR(linfo.st_mode)))

@@ -2,7 +2,7 @@
 
 extern int g_stdout;
 
-int write(int fd, const void *buffer, size_t count);
+ssize_t write(int fd, const void *buffer, size_t count);
 
 size_t strlen(const char *s)
 {

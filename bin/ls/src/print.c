@@ -13,32 +13,18 @@ static void putspaces(int number)
 static void put_user_group(struct env *env, struct file *file, struct dir *dir)
 {
 	if (!env->opt_g)
-	{
-		printf(" %s", file->user);
-		putspaces(1 + dir->user_len - strlen(file->user));
-	}
+		printf(" %-*s ", dir->user_len, file->user);
 	if (!env->opt_o)
-	{
-		printf(" %s", file->group);
-		putspaces(1 + dir->group_len - strlen(file->group));
-	}
+		printf(" %-*s", dir->group_len, file->group);
 }
 
 static void print_l(struct env *env, struct file *file, struct dir *dir)
 {
 	if (!env->opt_l)
 		return;
-	fputs(file->perms, stdout);
-	putspaces(1 + dir->links_len - strlen(file->links));
-	fputs(file->links, stdout);
+	printf("%s %*s ", file->perms, dir->links_len, file->links);
 	put_user_group(env, file, dir);
-	if (env->opt_o && env->opt_g)
-		putspaces(2);
-	putspaces(1 + dir->size_len - strlen(file->size));
-	fputs(file->size, stdout);
-	putspaces(1 + dir->date_len - strlen(file->date));
-	fputs(file->date, stdout);
-	putchar(' ');
+	printf(" %*s %*s ", dir->size_len, file->size, dir->date_len, file->date);
 }
 
 static void print_ext(struct env *env, struct file *file)

@@ -20,6 +20,8 @@
 
 static int verify_userdata(const void *ptr, size_t count)
 {
+	if (!ptr)
+		return 0;
 	/* XXX */
 	(void)ptr;
 	(void)count;
@@ -28,6 +30,8 @@ static int verify_userdata(const void *ptr, size_t count)
 
 static int verify_userstr(const char *str)
 {
+	if (!str)
+		return 0;
 	/* XXX */
 	(void)str;
 	return 1;
@@ -35,6 +39,8 @@ static int verify_userstr(const char *str)
 
 static int verify_userstra(const char *const *array)
 {
+	if (!array)
+		return 0;
 	/* XXX */
 	(void)array;
 	return 1;
@@ -86,6 +92,21 @@ static int sys_write(int fd, const void *data, size_t count)
 	return file->op->write(file, data, count);
 }
 
+static int reserve_fd(struct proc *proc)
+{
+	for (size_t i = 0; i < proc->files_nb; ++i)
+	{
+		if (!proc->files[i])
+			return i;
+	}
+	struct file **fd = realloc(proc->files, sizeof(*proc->files) * (proc->files_nb + 1), M_ZERO);
+	if (!fd)
+		return -1;
+	proc->files = fd;
+	proc->files_nb++;
+	return proc->files_nb - 1;
+}
+
 static int sys_open(const char *path, int flags, mode_t mode)
 {
 	(void)mode;
@@ -115,25 +136,16 @@ static int sys_open(const char *path, int flags, mode_t mode)
 	file->op = node->fop;
 	file->node = node;
 	file->off = 0;
-	for (size_t i = 0; i < curthread->proc->files_nb; ++i)
-	{
-		if (curthread->proc->files[i])
-			continue;
-		curthread->proc->files[i] = file;
-		return i;
-	}
-	struct file **fd = realloc(curthread->proc->files, sizeof(*curthread->proc->files) * (curthread->proc->files_nb + 1), 0);
-	if (!fd)
+	int fd = reserve_fd(curthread->proc);
+	if (fd == -1)
 	{
 		if (file->op && file->op->close)
 			file->op->close(file);
 		file_decref(file);
-		return -ENOMEM;
+		return -EMFILE;
 	}
-	curthread->proc->files = fd;
-	curthread->proc->files[curthread->proc->files_nb] = file;
-	curthread->proc->files_nb++;
-	return curthread->proc->files_nb - 1;
+	curthread->proc->files[fd] = file;
+	return fd;
 }
 
 static int sys_close(int fd)
@@ -565,6 +577,51 @@ static int sys_readlink(const char *pathname, char *buf, size_t bufsize)
 	return -ENOSYS;
 }
 
+static int sys_dup(int oldfd)
+{
+	if (oldfd < 0 || (unsigned)oldfd >= curthread->proc->files_nb)
+		return -EBADF;
+	struct file *file = curthread->proc->files[oldfd];
+	if (!file)
+		return -EBADF;
+	int newfd = reserve_fd(curthread->proc);
+	if (newfd == -1)
+		return -EMFILE;
+	file_incref(file);
+	curthread->proc->files[newfd] = file;
+	return newfd;
+}
+
+static int sys_dup2(int oldfd, int newfd)
+{
+	if (oldfd < 0 || (unsigned)oldfd >= curthread->proc->files_nb)
+		return -EBADF;
+	if (newfd < 0)
+		return -EBADF;
+	struct file *file = curthread->proc->files[oldfd];
+	if (!file)
+		return -EBADF;
+	if (oldfd == newfd)
+		return newfd;
+	if ((unsigned)newfd < curthread->proc->files_nb)
+	{
+		struct file *prv = curthread->proc->files[newfd];
+		if (prv)
+			file_decref(prv);
+		file_incref(file);
+		curthread->proc->files[newfd] = file;
+		return newfd;
+	}
+	struct file **fd = realloc(curthread->proc->files, sizeof(*curthread->proc->files) * (newfd + 1), M_ZERO);
+	if (!fd)
+		return -ENOMEM;
+	curthread->proc->files = fd;
+	curthread->proc->files_nb = newfd + 1;
+	file_incref(file);
+	curthread->proc->files[newfd] = file;
+	return newfd;
+}
+
 static int (*g_syscalls[])() =
 {
 	[SYS_EXIT]      = (void*)sys_exit,
@@ -604,6 +661,8 @@ static int (*g_syscalls[])() =
 	[SYS_MMAP]      = (void*)sys_mmap,
 	[SYS_MUNMAP]    = (void*)sys_munmap,
 	[SYS_READLINK]  = (void*)sys_readlink,
+	[SYS_DUP]       = (void*)sys_dup,
+	[SYS_DUP2]      = (void*)sys_dup2,
 };
 
 void call_sys(const struct int_ctx *ctx)

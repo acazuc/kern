@@ -72,19 +72,6 @@ static void outchars(struct printf_buf *buf, char c, size_t n)
 		outchar(buf, c);
 }
 
-#if 0
-static void print_arg_spaces(struct printf_buf *buf, struct arg *arg, size_t len)
-{
-	size_t preci;
-	size_t width;
-
-	preci = (size_t)arg->preci;
-	width = (size_t)arg->width;
-	if (arg->width > 0 && ((arg->preci <= 0 && width > MAX(preci, len))))
-		print_spaces(buf, arg->width - (arg->preci <= 0 ? len : MAX(preci, len)));
-}
-#endif
-
 static long long int get_int_val(struct arg *arg)
 {
 	if (arg->flags & FLAG_LL)
@@ -156,7 +143,7 @@ int vfprintf(FILE *fp, const char *fmt, va_list va_arg)
 	buf.size = sizeof(str);
 	buf.len = 0;
 	int ret = printf_buf(&buf, fmt, va_arg);
-	write(fp->fd, buf.data, strlen(buf.data));
+	fwrite(buf.data, strlen(buf.data), 1, fp);
 	return ret;
 }
 
@@ -226,8 +213,14 @@ static int parse_preci(struct arg *arg, const char *fmt, size_t *i)
 	if (fmt[*i] != '.')
 		return 1;
 	(*i)++;
+	if (fmt[*i] == '*')
+	{
+		arg->preci = va_arg(*arg->va_arg, int);
+		(*i)++;
+		return 1;
+	}
 	start = *i;
-	while (fmt[*i] >= '0' && fmt[*i] <= '9')
+	while (isdigit(fmt[*i]))
 		(*i)++;
 	end = *i;
 	if (end == start)
@@ -286,6 +279,12 @@ static int parse_width(struct arg *arg, const char *fmt, size_t *i)
 	size_t start;
 	size_t end;
 
+	if (fmt[*i] == '*')
+	{
+		arg->width = va_arg(*arg->va_arg, int);
+		(*i)++;
+		return 1;
+	}
 	start = *i;
 	while (isdigit(fmt[*i]))
 		(*i)++;

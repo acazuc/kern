@@ -267,7 +267,7 @@ void *malloc(size_t size, uint32_t flags)
 	}
 	MALLOC_UNLOCK();
 	if (flags & M_ZERO)
-		memset(addr, 0, size);
+		memset(addr, 0, g_block_sizes[type]);
 	return addr;
 }
 

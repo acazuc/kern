@@ -15,16 +15,6 @@ struct dirent
 	char d_name[];
 };
 
-/* XXX move to internal file */
-struct DIR
-{
-	int fd;
-	char buf[4096];
-	size_t buf_pos;
-	size_t buf_end;
-	struct dirent *dirent;
-};
-
 DIR *opendir(const char *name);
 DIR *fdopendir(int fd);
 struct dirent *readdir(DIR *dirp);

@@ -117,11 +117,11 @@ typedef int32_t id_t;
 #endif
 
 int exit(int error_code);
-int read(int fd, void *buffer, size_t count);
-int write(int fd, const void *buffer, size_t count);
+ssize_t read(int fd, void *buffer, size_t count);
+ssize_t write(int fd, const void *buffer, size_t count);
 int open(const char *path, int flags, ...);
 int close(int fd);
-int lseek(int fd, off_t off, int whence);
+off_t lseek(int fd, off_t off, int whence);
 void *mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off);
 
 size_t strlen(const char *s);

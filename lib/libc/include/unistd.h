@@ -16,16 +16,23 @@ struct sys_dirent;
 
 ssize_t write(int fd, const void *buffer, size_t count);
 ssize_t read(int fd, void *buffer, size_t count);
-pid_t fork(void);
+off_t lseek(int fd, off_t offset, int whence);
 void _exit(int status);
 int close(int fd);
+int dup(int oldfd);
+int dup2(int oldfd, int newfd);
+
 int stat(const char *pathname, struct stat *statbuf);
 int lstat(const char *pathname, struct stat *statbuf);
 int fstat(int fd, struct stat *statbuf);
 ssize_t readlink(const char *pathname, char *buf, size_t bufsiz);
+
 int getdents(int fd, struct sys_dirent *dirp, unsigned count);
+
 pid_t getpid(void);
 pid_t getppid(void);
+pid_t fork(void);
+
 int execve(const char *pathname, char *const argv[], char *const envp[]);
 
 int getopt(int argc, char * const argv[], const char *optstring);
