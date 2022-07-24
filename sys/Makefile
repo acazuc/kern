@@ -84,10 +84,11 @@ $(BIN_NAME): $(OBJ) $(LDFILE)
 	@ld -melf_i386 -r -b binary -o obj/sh ../bin/sh/sh
 	@ld -melf_i386 -r -b binary -o obj/cat ../bin/cat/cat
 	@ld -melf_i386 -r -b binary -o obj/init ../bin/init/init
+	@ld -melf_i386 -r -b binary -o obj/ls ../bin/ls/ls
 	@ld -melf_i386 -r -b binary -o obj/libc.so ../lib/libc/libc.so
 	@ld -melf_i386 -r -b binary -o obj/ld.so ../lib/ld/ld.so
 	@echo "LD $@"
-	@$(LD) $(LDFLAGS) -ffreestanding -T $(LDFILE) -o $@ $(OBJ) obj/sh obj/cat obj/init obj/libc.so obj/ld.so -lgcc
+	@$(LD) $(LDFLAGS) -ffreestanding -T $(LDFILE) -o $@ $(OBJ) obj/sh obj/cat obj/init obj/ls obj/libc.so obj/ld.so -lgcc
 
 clean:
 	@rm -f $(OBJ)

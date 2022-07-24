@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <stdio.h>
 #include <ctype.h>
 
 #define FLAG_MINUS (1 << 0)
@@ -52,31 +53,23 @@ static void arg_ctr(struct arg *arg, va_list *va_arg)
 	arg->type = '\0';
 }
 
-static void putchar(struct printf_buf *buf, char c)
+static void outchar(struct printf_buf *buf, char c)
 {
 	if (buf->len < buf->size)
 		buf->data[buf->len] = c;
 	buf->len++;
 }
 
-#if 0
-static void putnstr(struct printf_buf *buf, const char *s, size_t n)
-{
-	for (size_t i = 0; s[i] && i < n; ++i)
-		putchar(buf, s[i]);
-}
-#endif
-
-static void putstr(struct printf_buf *buf, const char *s)
+static void outstr(struct printf_buf *buf, const char *s)
 {
 	for (size_t i = 0; s[i]; ++i)
-		putchar(buf, s[i]);
+		outchar(buf, s[i]);
 }
 
-static void putchars(struct printf_buf *buf, char c, size_t n)
+static void outchars(struct printf_buf *buf, char c, size_t n)
 {
 	for (size_t i = 0; i < n; ++i)
-		putchar(buf, c);
+		outchar(buf, c);
 }
 
 #if 0
@@ -145,7 +138,7 @@ static int printf_buf(struct printf_buf *buf, const char *fmt, va_list va_arg)
 		}
 		else
 		{
-			putchar(buf, fmt[i]);
+			outchar(buf, fmt[i]);
 		}
 	}
 	if (buf->len < buf->size)
@@ -155,7 +148,7 @@ static int printf_buf(struct printf_buf *buf, const char *fmt, va_list va_arg)
 	return buf->len;
 }
 
-int vprintf(const char *fmt, va_list va_arg)
+int vfprintf(FILE *fp, const char *fmt, va_list va_arg)
 {
 	char str[1024];
 	struct printf_buf buf;
@@ -163,15 +156,29 @@ int vprintf(const char *fmt, va_list va_arg)
 	buf.size = sizeof(str);
 	buf.len = 0;
 	int ret = printf_buf(&buf, fmt, va_arg);
-	write(1, buf.data, strlen(buf.data));
+	write(fp->fd, buf.data, strlen(buf.data));
 	return ret;
+}
+
+int fprintf(FILE *fp, const char *fmt, ...)
+{
+	va_list va_arg;
+	va_start(va_arg, fmt);
+	int ret = vfprintf(fp, fmt, va_arg);
+	va_end(va_arg);
+	return ret;
+}
+
+int vprintf(const char *fmt, va_list va_arg)
+{
+	return vfprintf(stdout, fmt, va_arg);
 }
 
 int printf(const char *fmt, ...)
 {
 	va_list va_arg;
 	va_start(va_arg, fmt);
-	int ret = vprintf(fmt, va_arg);
+	int ret = vfprintf(stdout, fmt, va_arg);
 	va_end(va_arg);
 	return ret;
 }
@@ -315,14 +322,14 @@ static void print_str(struct printf_buf *buf, struct arg *arg, const char *prefi
 	else
 		pad_len = 0;
 	if (pad_len && !(arg->flags & (FLAG_ZERO | FLAG_MINUS)))
-			putchars(buf, ' ', pad_len);
+			outchars(buf, ' ', pad_len);
 	if (prefix)
-		putstr(buf, prefix);
+		outstr(buf, prefix);
 	if (pad_len && (arg->flags & FLAG_ZERO))
-		putchars(buf, '0', pad_len);
-	putstr(buf, s);
+		outchars(buf, '0', pad_len);
+	outstr(buf, s);
 	if (pad_len && (arg->flags & FLAG_MINUS))
-		putchars(buf, ' ', pad_len);
+		outchars(buf, ' ', pad_len);
 }
 
 static void print_c(struct printf_buf *buf, struct arg *arg)
@@ -421,7 +428,7 @@ static void print_p(struct printf_buf *buf, struct arg *arg)
 static void print_mod(struct printf_buf *buf, struct arg *arg)
 {
 	(void)arg;
-	putchar(buf, '%');
+	outchar(buf, '%');
 }
 
 static const print_fn_t g_print_fns[256] =

@@ -10,13 +10,13 @@ DISK_FILE = disk.qcow2
 
 all: sys
 
-bin:
-	@make MKDIR=$(MKDIR) INCLUDE_SYSDIR=include -C bin
-
 lib:
 	@make MKDIR=$(MKDIR) INCLUDE_SYSDIR=include -C lib
 
-sys: bin lib
+bin: lib
+	@make MKDIR=$(MKDIR) INCLUDE_SYSDIR=include -C bin
+
+sys: bin
 	@make MKDIR=$(MKDIR) -C sys
 
 $(BIN_NAME): sys
@@ -67,8 +67,8 @@ size:
 
 clean:
 	@rm -f $(ISO_NAME)
-	@make MKDIR=$(MKDIR) -C bin clean
 	@make MKDIR=$(MKDIR) -C lib clean
+	@make MKDIR=$(MKDIR) -C bin clean
 	@make MKDIR=$(MKDIR) -C sys clean
 
 .PHONY: all clean run bin lib sys

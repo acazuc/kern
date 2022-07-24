@@ -2,10 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <dirent.h>
+#include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
-
-static int g_fd;
 
 static void exec_line(const char *line)
 {
@@ -13,7 +13,7 @@ static void exec_line(const char *line)
 	{
 		for (size_t i = 0; i < 10; ++i)
 		{
-			char tmp[128] = "\e[0;30m0;30 \e[1;30m1;30 \e[0;40m0;40\e[0m \e[1;40m1;40\e[0m\n";
+			char tmp[] = "\e[0;30m0;30 \e[1;30m1;30 \e[0;40m0;40\e[0m \e[1;40m1;40\e[0m";
 			tmp[5]  = '0' + i;
 			tmp[10] = '0' + i;
 			tmp[17] = '0' + i;
@@ -22,7 +22,7 @@ static void exec_line(const char *line)
 			tmp[34] = '0' + i;
 			tmp[45] = '0' + i;
 			tmp[50] = '0' + i;
-			write(g_fd, tmp, 56);
+			puts(tmp);
 		}
 		return;
 	}
@@ -35,14 +35,14 @@ static void exec_line(const char *line)
 		int res = stat(line, &st);
 		if (res)
 		{
-			write(g_fd, "can't stat\n", 11);
+			fputs("can't stat", stderr);
 			return;
 		}
-		char str[] = "mode: 000\n";
+		char str[] = "mode: 000";
 		str[6] = '0' + ((st.st_mode >> 6) & 0x7);
 		str[7] = '0' + ((st.st_mode >> 3) & 0x7);
 		str[8] = '0' + ((st.st_mode >> 0) & 0x7);
-		write(g_fd, str, 10);
+		puts(str);
 		return;
 	}
 	if (!strncmp(line, "ls", 2))
@@ -54,28 +54,22 @@ static void exec_line(const char *line)
 		int fd = open(line, O_RDONLY);
 		if (fd < 0)
 		{
-			write(g_fd, "can't open file\n", 16);
+			fprintf(stderr, "failed to open file\n");
 			return;
 		}
 		int res;
-		write(g_fd, "files: ", 7);
-		do
+		printf("files: ");
+		DIR *dir = fdopendir(fd);
+		if (!dir)
 		{
-			res = getdents(fd, (struct sys_dirent*)buffer, sizeof(buffer));
-			if (res < 0)
-			{
-				write(g_fd, "can't getdents\n", 15);
-				break;
-			}
-			for (int i = 0; i < res;)
-			{
-				struct sys_dirent *dirent = (struct sys_dirent*)&buffer[i];
-				write(g_fd, dirent->name, strlen(dirent->name));
-				write(g_fd, " ", 1);
-				i += dirent->reclen;
-			}
-		} while (res);
-		write(g_fd, "\n", 1);
+			fprintf(stderr, "fdopendir failed\n");
+			return;
+		}
+		struct dirent *dirent;
+		while ((dirent = readdir(dir)))
+			printf("%s ", dirent->d_name);
+		closedir(dir);
+		puts("");
 		close(fd);
 		return;
 	}
@@ -84,70 +78,59 @@ static void exec_line(const char *line)
 		int pid = fork();
 		if (pid < 0)
 		{
-			write(g_fd, "fork failed\n", 12);
+			fprintf(stderr, "fork failed\n");
 			return;
 		}
 		if (pid)
 		{
-			write(g_fd, "parent\n", 7);
+			puts("parent\n");
 			return;
 		}
-		write(g_fd, "child\n", 6);
+		puts("child\n");
 		exit(0);
-		write(g_fd, "whoopsie\n", 9);
 	}
 	if (!strcmp(line, "pid"))
 	{
 		int pid = getpid();
-		char c[2] = {pid + '0', '\n'};
-		write(g_fd, c, 2);
+		printf("%d\n", pid);
 		return;
 	}
-	write(g_fd, "unknown command: ", 17);
-	write(g_fd, line, strlen(line));
-	write(g_fd, "\n", 1);
+	fprintf(stderr, "unknown command: %s\n", line);
 	int pid = fork();
 	if (pid < 0)
 	{
-		write(g_fd, "fork failed\n", 12);
+		fprintf(stderr, "fork failed\n");
 		return;
 	}
 	if (pid)
 	{
-		write(g_fd, "parent\n", 7);
+		printf("parent\n");
 		return;
 	}
 	const char *bin = line;
-	const char *argv[] = {bin, NULL};
+	const char * const argv[] = {bin, NULL};
 	const char *null = NULL;
-	execve(bin, argv, &null);
-	write(g_fd, "failed to exec /bin/sh\n", 23);
+	execve(bin, (char * const*)argv, (char * const*)&null);
+	printf("failed to exec %s\n", bin);
 	exit(0);
 }
 
 int main(int ac, char **av, char **ev)
 {
-	g_fd = open("/dev/tty0", O_RDONLY);
-	if (g_fd < 0)
-		goto loop;
-	write(g_fd, "userland\n", 9);
 	char buf[78] = "";
 	char line[78];
 	size_t buf_pos = 0;
 	while (1)
 	{
-		write(g_fd, "\e[0m$ ", 6);
+		printf("\e[0m# ");
 		char *eol = NULL;
 		do
 		{
-			int rd = read(g_fd, buf + buf_pos, sizeof(buf) - buf_pos - 1);
+			int rd = read(0, buf + buf_pos, sizeof(buf) - buf_pos - 1);
 			if (rd < 0)
 			{
 				if (errno != EAGAIN)
-				{
-					write(g_fd, "rd < 0\n", 7);
-					while (1) ;
-				}
+					printf("rd < 0\n");
 				continue;
 			}
 			buf_pos += rd;
@@ -160,8 +143,6 @@ int main(int ac, char **av, char **ev)
 		buf_pos -= line_len + 1;
 		exec_line(line);
 	}
-	close(g_fd);
-loop: goto loop;
 }
 
 void _start(int argc, char **argv, char **envp)

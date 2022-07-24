@@ -3,6 +3,7 @@
 
 #include <sys/syscall.h>
 #include <sys/sched.h>
+#include <sys/mman.h>
 #include <sys/proc.h>
 #include <sys/file.h>
 #include <sys/proc.h>
@@ -114,6 +115,13 @@ static int sys_open(const char *path, int flags, mode_t mode)
 	file->op = node->fop;
 	file->node = node;
 	file->off = 0;
+	for (size_t i = 0; i < curthread->proc->files_nb; ++i)
+	{
+		if (curthread->proc->files[i])
+			continue;
+		curthread->proc->files[i] = file;
+		return i;
+	}
 	struct file **fd = realloc(curthread->proc->files, sizeof(*curthread->proc->files) * (curthread->proc->files_nb + 1), 0);
 	if (!fd)
 	{
@@ -363,6 +371,31 @@ static int sys_stat(const char *pathname, struct stat *statbuf)
 	return 0;
 }
 
+static int sys_lstat(const char *pathname, struct stat *statbuf)
+{
+	if (!verify_userstr(pathname) || !verify_userdata(statbuf, sizeof(*statbuf)))
+		return -EFAULT;
+	struct fs_node *node;
+	int ret = vfs_getnode(NULL, pathname, &node); /* XXX noderef flag */
+	if (ret)
+		return -ret;
+	statbuf->st_dev = node->sb->dev;
+	statbuf->st_ino = node->ino;
+	statbuf->st_mode = node->mode;
+	statbuf->st_nlink = node->nlink;
+	statbuf->st_uid = node->uid;
+	statbuf->st_gid = node->gid;
+	statbuf->st_rdev = node->rdev;
+	statbuf->st_size = node->size;
+	statbuf->st_blksize = node->blksize;
+	statbuf->st_blocks = node->blocks;
+	statbuf->st_atim = node->atime;
+	statbuf->st_mtim = node->mtime;
+	statbuf->st_ctim = node->ctime;
+	fs_node_decref(node);
+	return 0;
+}
+
 static int sys_fstat(int fd, struct stat *statbuf)
 {
 	if (fd < 0 || (size_t)fd >= curthread->proc->files_nb)
@@ -449,7 +482,7 @@ static int sys_getdents(int fd, struct sys_dirent *dirp, size_t count)
 	return getdents_ctx.off;
 }
 
-static int sys_execve(const char *pathname, const char *const *argv, const char *const *envp)
+static int sys_execve(const char *pathname, const char * const *argv, const char * const *envp)
 {
 	if (!verify_userstr(pathname) || !verify_userstra(argv) || !verify_userstra(envp))
 		return -EFAULT;
@@ -472,29 +505,9 @@ static int sys_execve(const char *pathname, const char *const *argv, const char 
 			return -ret;
 		}
 	}
-	/* XXX move everything below to proc.h */
-	/* XXX better way to do this */
-	struct vmm_ctx *vmm_ctx = vmm_ctx_create();
-	if (!vmm_ctx)
-	{
-		file_decref(&file);
-		return -ENOMEM;
-	}
-	void *entry;
-	ret = elf_createctx(&file, vmm_ctx, &entry);
-	if (ret)
-	{
-		file_decref(&file);
-		return -ret;
-	}
-	curthread->proc->entrypoint = entry;
-	vmm_ctx_delete(curthread->proc->vmm_ctx);
-	curthread->proc->vmm_ctx = vmm_ctx;
-	curthread->stack = vmalloc_user(curthread->proc->vmm_ctx, (void*)(0xC0000000 - curthread->stack_size), curthread->stack_size); /* XXX ASLR */
-	init_trapframe_user(curthread);
-	proc_push_argv_envp(curthread, argv, envp);
-	curthread->tf.eip = (uint32_t)entry;
-	return 0;
+	ret = proc_execve(curthread, &file, argv, envp);
+	file_decref(&file);
+	return -ret;
 }
 
 static int sys_lseek(int fd, off_t off, int whence)
@@ -511,25 +524,45 @@ static int sys_lseek(int fd, off_t off, int whence)
 
 static void *sys_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off)
 {
-	if (fd < 0 || (unsigned)fd >= curthread->proc->files_nb)
-		return (void*)-EBADF;
-	struct file *file = curthread->proc->files[fd];
-	if (!file)
-		return (void*)-EBADF;
-	if (!file->op || !file->op->mmap)
-		return (void*)-EINVAL; /* XXX */
-	/* XXX use flags, prot, addr */
-	void *kaddr = vmalloc_user(curthread->proc->vmm_ctx, addr, len);
-	if (!kaddr)
+	struct file *file;
+	if (!(flags & MAP_ANONYMOUS))
 	{
-		kaddr = vmalloc_user(curthread->proc->vmm_ctx, NULL, len);
-		if (!kaddr)
+		if (fd < 0 || (unsigned)fd >= curthread->proc->files_nb)
+			return (void*)-EBADF;
+		file = curthread->proc->files[fd];
+		if (!file)
+			return (void*)-EBADF;
+		if (!file->op || !file->op->mmap)
+			return (void*)-EINVAL; /* XXX */
+	}
+	/* XXX use flags, prot, addr */
+	addr = vmalloc_user(curthread->proc->vmm_ctx, addr, len);
+	if (!addr)
+	{
+		addr = vmalloc_user(curthread->proc->vmm_ctx, NULL, len);
+		if (!addr)
 			return (void*)-ENOMEM;
 	}
-	int ret = file->op->mmap(file, curthread->proc->vmm_ctx, kaddr, off, len);
-	if (ret)
-		return (void*)-ret;
+	if (!(flags & MAP_ANONYMOUS))
+	{
+		int ret = file->op->mmap(file, curthread->proc->vmm_ctx, addr, off, len);
+		if (ret)
+			return (void*)-ret;
+	}
 	return addr;
+}
+
+static int sys_munmap(void *addr, size_t len)
+{
+	/* XXX */
+	return -ENOSYS;
+}
+
+static int sys_readlink(const char *pathname, char *buf, size_t bufsize)
+{
+	if (!verify_userstr(pathname) || !verify_userdata(buf, bufsize))
+		return -EFAULT;
+	return -ENOSYS;
 }
 
 static int (*g_syscalls[])() =
@@ -564,10 +597,13 @@ static int (*g_syscalls[])() =
 	[SYS_IOCTL]     = (void*)sys_ioctl,
 	[SYS_STAT]      = (void*)sys_stat,
 	[SYS_FSTAT]     = (void*)sys_fstat,
+	[SYS_LSTAT]     = (void*)sys_lstat,
 	[SYS_GETDENTS]  = (void*)sys_getdents,
 	[SYS_EXECVE]    = (void*)sys_execve,
 	[SYS_LSEEK]     = (void*)sys_lseek,
 	[SYS_MMAP]      = (void*)sys_mmap,
+	[SYS_MUNMAP]    = (void*)sys_munmap,
+	[SYS_READLINK]  = (void*)sys_readlink,
 };
 
 void call_sys(const struct int_ctx *ctx)

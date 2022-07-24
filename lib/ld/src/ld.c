@@ -97,6 +97,43 @@ static const Elf32_Dyn *get_dyn(struct elf *elf, const Elf32_Phdr *phdr, Elf32_S
 	return NULL;
 }
 
+static int get_rel_sym(struct elf *elf, const Elf32_Rel *rel, uint32_t *addr)
+{
+	if (!elf->symtab)
+	{
+		puts("no symtab\n");
+		return 1;
+	}
+	if (!elf->strtab)
+	{
+		puts("no strtab\n");
+		return 1;
+	}
+	uint32_t symidx = ELF32_R_SYM(rel->r_info);
+	const Elf32_Sym *sym = (const Elf32_Sym*)(elf->addr + elf->symtab->d_un.d_ptr + symidx * elf->syment->d_un.d_val);
+	if (sym->st_shndx != SHN_UNDEF)
+	{
+		*addr = elf->addr + sym->st_value;
+		return 0;
+	}
+	const char *name = (const char*)(elf->addr + elf->strtab->d_un.d_ptr + sym->st_name);
+#ifdef DEBUG
+	puts("searching symbol ");
+	puts(name);
+	puts("\n");
+#endif
+	uint32_t value = find_dep_sym(elf, name, ELF32_ST_TYPE(sym->st_info));
+	if (!value)
+	{
+		puts("symbol not found: ");
+		puts(name);
+		puts("\n");
+		return 1;
+	}
+	*addr = value;
+	return 0;
+}
+
 static int handle_dt_rel(struct elf *elf, const Elf32_Dyn *rel, const Elf32_Dyn *relsz, size_t size)
 {
 	for (size_t i = 0; i < relsz->d_un.d_val; i += size)
@@ -106,45 +143,29 @@ static int handle_dt_rel(struct elf *elf, const Elf32_Dyn *rel, const Elf32_Dyn 
 		switch (ELF32_R_TYPE(r->r_info))
 		{
 			case R_386_RELATIVE:
-				*(uint32_t*)addr += elf->addr;
+				*addr += elf->addr;
 				break;
 			case R_386_JMP_SLOT:
 			case R_386_GLOB_DAT:
 			{
-				if (!elf->symtab)
+				uint32_t sym;
+				if (get_rel_sym(elf, r, &sym))
 				{
-					puts("no symtab on jmpslot / globdat rel\n");
+					puts("can't get jmpslot / globdat sym\n");
 					return 1;
 				}
-				if (!elf->strtab)
+				*addr = sym;
+				break;
+			}
+			case R_386_32:
+			{
+				uint32_t sym;
+				if (get_rel_sym(elf, r, &sym))
 				{
-					puts("no strtab on jmpslot / globdat rel\n");
+					puts("can't get jmpslot / globdat sym\n");
 					return 1;
 				}
-				uint32_t symidx = ELF32_R_SYM(r->r_info);
-				const Elf32_Sym *sym = (const Elf32_Sym*)(elf->addr + elf->symtab->d_un.d_ptr + symidx * elf->syment->d_un.d_val);
-				if (sym->st_shndx == SHN_UNDEF)
-				{
-					const char *name = (const char*)(elf->addr + elf->strtab->d_un.d_ptr + sym->st_name);
-#ifdef DEBUG
-					puts("searching symbol ");
-					puts(name);
-					puts("\n");
-#endif
-					uint32_t value = find_dep_sym(elf, name, ELF32_ST_TYPE(sym->st_info));
-					if (!value)
-					{
-						puts("symbol not found: ");
-						puts(name);
-						puts("\n");
-						return 1;
-					}
-					*addr = value;
-				}
-				else
-				{
-					*addr = elf->addr + sym->st_value;
-				}
+				*addr += sym;
 				break;
 			}
 			default:
@@ -388,6 +409,9 @@ static int handle_pt_load(struct elf *elf, const Elf32_Phdr *phdr)
 		puts("can't mmap at wanted location\n");
 		return 1;
 	}
+	size_t prefix = phdr->p_vaddr - addr;
+	memset(ptr, 0, prefix);
+	memset(ptr + prefix + phdr->p_filesz, 0, size - (phdr->p_filesz + prefix));
 	return 0;
 }
 
@@ -617,6 +641,7 @@ static int main(int argc, char **argv, char **envp, void **jmp)
 	struct elf *elf = getelf();
 	if (!elf)
 		return ret;
+	strcpy(elf->path, argv[0]);
 	elf->fd = open(argv[0], O_RDONLY);
 	if (elf->fd < 0)
 	{
@@ -643,6 +668,8 @@ static int main(int argc, char **argv, char **envp, void **jmp)
 
 end:
 	close(elf->fd);
+	for (size_t i = 0; i < g_elf_nb; ++i)
+		close(g_elf[i].fd);
 	return ret;
 }
 

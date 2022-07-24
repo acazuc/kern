@@ -27,7 +27,7 @@ all: $(BIN)
 $(OBJ_PATH)/%.c.o: $(SRC_PATH)/%.c
 	@mkdir -p $(dir $@)
 	@echo "CC $<"
-	$(CC) $(CFLAGS) -c $< -o $@ $(LIBS_INC)
+	@$(CC) $(CFLAGS) -c $< -o $@ $(LIBS_INC)
 
 $(OBJ_PATH)/%.s.o: $(SRC_PATH)/%.s
 	@mkdir -p $(dir $@)
@@ -43,3 +43,6 @@ $(BIN): $(OBJ)
 	@mkdir -p $(dir $@)
 	@echo "LD $@"
 	@$(LD) -o $@ $(LDFLAGS) $(OBJ) -lgcc $(LIBS_DIR) $(LIBS_LINK) -Wl,-dynamic-linker,/lib/ld.so
+
+clean:
+	@rm -f $(OBJ)

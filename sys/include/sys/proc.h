@@ -62,12 +62,13 @@ struct thread
 void init_trapframe_kern(struct thread *thread);
 void init_trapframe_user(struct thread *thread);
 
-struct thread *uproc_create(const char *name, void *entry, const char * const *av, const char * const *ev);
-struct thread *kproc_create(const char *name, void *entry, const char * const *av, const char * const *ev);
+struct thread *uproc_create(const char *name, void *entry, const char * const *argv, const char * const *envp);
+struct thread *kproc_create(const char *name, void *entry, const char * const *argv, const char * const *envp);
 struct thread *proc_fork(struct thread *thread);
-struct thread *uproc_create_elf(const char *name, struct file *file, const char * const *av, const char * const *ev);
+struct thread *uproc_create_elf(const char *name, struct file *file, const char * const *argv, const char * const *envp);
 
-void proc_push_argv_envp(struct thread *thread, const char * const * argv, const char * const *envp);
+void proc_push_argv_envp(struct thread *thread, const char * const *argv, const char * const *envp);
+int proc_execve(struct thread *thread, struct file *file, const char * const *argv, const char * const *envp);
 
 int elf_createctx(struct file *file, struct vmm_ctx *vmm_ctx, void **entry);
 

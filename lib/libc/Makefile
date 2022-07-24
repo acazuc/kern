@@ -7,5 +7,8 @@ SRC = string.c \
       syscall.c \
       syscall.s \
       malloc.c \
+      stdio.c \
+      dirent.c \
+      getopt.c \
 
 include $(MKDIR)/lib.mk

@@ -72,7 +72,7 @@ static int root_lookup(struct fs_node *dir, const char *name, uint32_t namelen, 
 		struct devfs_node *node = g_devfs.nodes[i];
 		if (!node)
 			continue;
-		if (!strncmp(node->name, name, namelen))
+		if (strlen(node->name) == namelen && !strncmp(node->name, name, namelen))
 		{
 			*child = node->node;
 			return 0;
@@ -286,11 +286,11 @@ struct fs_sb *devfs_init(struct fs_node *dir)
 	root->mode = 0755 | S_IFDIR;
 	root->refcount = 1;
 	g_sb.root = root;
-	assert(!devfs_mkcdev("mem", 0, 0, 0400, makedev(1, 1), &g_mem_fop, &g_devfs.node_mem), "can't create /dev/mem");
-	assert(!devfs_mkcdev("null", 0, 0, 0666, makedev(1, 3), &g_null_fop, &g_devfs.node_null), "can't create /dev/null");
-	assert(!devfs_mkcdev("zero", 0, 0, 0666, makedev(1, 5), &g_zero_fop, &g_devfs.node_zero), "can't create /dev/zero");
-	assert(!devfs_mkcdev("random", 0, 0, 0666, makedev(1, 8), &g_random_fop, &g_devfs.node_random), "can't create /dev/random");
-	assert(!devfs_mkcdev("urandom", 0, 0, 0666, makedev(1, 9), &g_urandom_fop, &g_devfs.node_urandom), "can't create /dev/urandom");
+	assert(!devfs_mkcdev("mem", 0, 0, 0400, makedev(1, 1), &g_mem_fop, &g_devfs.node_mem), "can't create /dev/mem\n");
+	assert(!devfs_mkcdev("null", 0, 0, 0666, makedev(1, 3), &g_null_fop, &g_devfs.node_null), "can't create /dev/null\n");
+	assert(!devfs_mkcdev("zero", 0, 0, 0666, makedev(1, 5), &g_zero_fop, &g_devfs.node_zero), "can't create /dev/zero\n");
+	assert(!devfs_mkcdev("random", 0, 0, 0666, makedev(1, 8), &g_random_fop, &g_devfs.node_random), "can't create /dev/random\n");
+	assert(!devfs_mkcdev("urandom", 0, 0, 0666, makedev(1, 9), &g_urandom_fop, &g_devfs.node_urandom), "can't create /dev/urandom\n");
 	dir->mount = &g_sb;
 	return &g_sb;
 }

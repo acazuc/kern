@@ -8,6 +8,7 @@
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
+#include <stdio.h>
 #include <arch.h>
 #include <vfs.h>
 
@@ -47,10 +48,20 @@ int vfs_getnode(struct fs_node *dir, const char *path, struct fs_node **node)
 		dir = dir->mount->root;
 	if (!S_ISDIR(dir->mode))
 		return ENOTDIR;
-	if (path[0] == '.' && path[1] == '.' && (path[2] == '/' || path[2] == '\0'))
-		return vfs_getnode(dir->parent, path + 3, node);
-	if (path[0] == '.' && (path[1] == '/' || path[1] == '\0'))
-		return vfs_getnode(dir, path + 2, node);
+	if (path[0] == '.' && path[1] == '.')
+	{
+		if (path[2] == '/')
+			return vfs_getnode(dir->parent, path + 3, node);
+		if (path[2] == '\0')
+			return vfs_getnode(dir->parent, path + 2, node);
+	}
+	else if (path[0] == '.')
+	{
+		if (path[1] == '/')
+			return vfs_getnode(dir, path + 2, node);
+		if (path[1] == '\0')
+			return vfs_getnode(dir, path + 1, node);
+	}
 	const char *next = strchrnul(path, '/');
 	size_t pathlen = next - path;
 	while (*next == '/')

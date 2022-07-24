@@ -26,7 +26,11 @@
 #define SYS_GETPGRP   65
 #define SYS_SETSID    66
 
+#define SYS_LSTAT     84
+#define SYS_READLINK  85
+
 #define SYS_MMAP      90
+#define SYS_MUNMAP    91
 
 #define SYS_GETPGID   132
 

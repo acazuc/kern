@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <errno.h>
 #include <stdio.h>
 #include <arch.h>
 #include <vfs.h>
@@ -54,7 +55,7 @@ static struct thread *proc_create(const char *name, struct vmm_ctx *vmm_ctx, voi
 	return thread;
 }
 
-void proc_push_argv_envp(struct thread *thread, const char * const * argv, const char * const *envp)
+void proc_push_argv_envp(struct thread *thread, const char * const *argv, const char * const *envp)
 {
 	/* XXX: check bounds of stack for cpy */
 	/* XXX: don't map all the stack ? */
@@ -214,6 +215,24 @@ struct thread *proc_fork(struct thread *thread)
 	if (newt->state == THREAD_PAUSED)
 		sched_run(newt);
 	return newt;
+}
+
+int proc_execve(struct thread *thread, struct file *file, const char * const *argv, const char * const *envp)
+{
+	struct vmm_ctx *vmm_ctx = vmm_ctx_create();
+	if (!vmm_ctx)
+		return ENOMEM;
+	void *entry;
+	int ret = elf_createctx(file, vmm_ctx, &entry);
+	if (ret)
+		return ret;
+	thread->proc->entrypoint = entry;
+	vmm_ctx_delete(thread->proc->vmm_ctx);
+	thread->proc->vmm_ctx = vmm_ctx;
+	thread->stack = vmalloc_user(thread->proc->vmm_ctx, (void*)(0xC0000000 - thread->stack_size), thread->stack_size); /* XXX ASLR */
+	init_trapframe_user(thread);
+	proc_push_argv_envp(thread, argv, envp);
+	return 0;
 }
 
 void proc_delete(struct proc *proc)

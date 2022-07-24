@@ -1,8 +1,11 @@
 all: $(DIRS)
 
 $(DIRS):
-	make -C $@
+	@make -C $@
 
-clean:
+$(addprefix clean_,$(DIRS)):
+	@make -C $(@:clean_%=%) clean
 
-.PHONY: $(DIRS)
+clean: $(addprefix clean_,$(DIRS))
+
+.PHONY: $(DIRS) clean $(addprefix clean_,$(DIRS))

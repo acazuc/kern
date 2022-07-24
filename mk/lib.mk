@@ -43,3 +43,6 @@ $(BIN): $(OBJ)
 	@mkdir -p $(dir $@)
 	@echo "LD $@"
 	@$(LD) -shared -o $@ $(LDFLAGS) $(OBJ) -lgcc $(LIBS_DIR) $(LIBS_LINK)
+
+clean:
+	@rm -f $(OBJ)

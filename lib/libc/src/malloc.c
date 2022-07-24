@@ -1,4 +1,5 @@
 #include <sys/queue.h>
+#include <sys/mman.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -21,6 +22,9 @@
 
 #define MALLOC_LOCK()
 #define MALLOC_UNLOCK()
+
+/* XXX set alloc_init as constructor */
+#define TEST_INIT if (!g_initialized) alloc_init();
 
 enum block_type
 {
@@ -84,6 +88,7 @@ struct page
 };
 
 static TAILQ_HEAD(, page) g_pages[BLOCK_LARGE + 1];
+static int g_initialized;
 
 static enum block_type get_block_type(size_t size)
 {
@@ -119,8 +124,8 @@ static struct page *alloc_page(enum block_type type, size_t size)
 	alloc_size = size + meta_size;
 	alloc_size += PAGE_SIZE - 1;
 	alloc_size -= alloc_size % PAGE_SIZE;
-	page = NULL; //vmalloc(alloc_size);
-	if (!page)
+	page = mmap(NULL, alloc_size, 0 /* XXX */, MAP_ANONYMOUS, -1, 0);
+	if (page == (void*)-1)
 		return NULL;
 	page->type = type;
 	page->page_size = alloc_size;
@@ -155,7 +160,7 @@ static void check_free_pages(enum block_type type)
 			continue;
 		}
 		TAILQ_REMOVE(&g_pages[type], lst, chain);
-		//vfree(lst, lst->page_size);
+		munmap(lst, lst->page_size);
 	}
 }
 
@@ -220,7 +225,7 @@ static void *realloc_large(struct page *lst, void *ptr, size_t size)
 		len = size;
 	memcpy(addr, ptr, len);
 	TAILQ_REMOVE(&g_pages[lst->type], lst, chain);
-	//vfree(lst, lst->page_size);
+	munmap(lst, lst->page_size);
 	MALLOC_UNLOCK();
 	return addr;
 }
@@ -250,6 +255,7 @@ void *malloc(size_t size)
 		return NULL;
 	type = get_block_type(size);
 	MALLOC_LOCK();
+	TEST_INIT
 	if (type == BLOCK_LARGE || !(addr = get_existing_block(type)))
 	{
 		addr = create_new_block(type, size);
@@ -268,6 +274,7 @@ void free(void *ptr)
 	if (!ptr)
 		return;
 	MALLOC_LOCK();
+	TEST_INIT
 	struct page *lst;
 	for (size_t i = 0; i < sizeof(g_pages) / sizeof(*g_pages); ++i)
 	{
@@ -278,7 +285,7 @@ void free(void *ptr)
 				if (ptr != lst->addr)
 					continue;
 				TAILQ_REMOVE(&g_pages[i], lst, chain);
-				//vfree(lst, lst->page_size);
+				munmap(lst, lst->page_size);
 				MALLOC_UNLOCK();
 				return;
 			}
@@ -312,6 +319,7 @@ void *realloc(void *ptr, size_t size)
 		return NULL;
 	}
 	MALLOC_LOCK();
+	TEST_INIT
 	struct page *lst;
 	for (size_t i = 0; i < sizeof(g_pages) / sizeof(*g_pages); ++i)
 	{
@@ -399,6 +407,7 @@ void alloc_init(void)
 {
 	for (size_t i = 0; i < sizeof(g_pages) / sizeof(*g_pages); ++i)
 		TAILQ_INIT(&g_pages[i]);
+	g_initialized = 1;
 }
 
 void show_alloc_mem(void)
@@ -407,6 +416,7 @@ void show_alloc_mem(void)
 	size_t total;
 
 	MALLOC_LOCK();
+	TEST_INIT
 	total = 0;
 	tmp = NULL;
 	while (1)

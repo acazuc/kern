@@ -18,7 +18,6 @@ void sched_init(void)
 
 void sched_add(struct thread *thread)
 {
-	printf("added thread to sched\n");
 	struct thread *it;
 	TAILQ_FOREACH(it, &g_threads, sched_chain)
 	{

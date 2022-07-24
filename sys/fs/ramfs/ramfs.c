@@ -32,6 +32,7 @@ extern uint8_t LIB_SYMBOL(lib, end);
 BIN_DEF(sh);
 BIN_DEF(cat);
 BIN_DEF(init);
+BIN_DEF(ls);
 LIB_DEF(libc);
 LIB_DEF(ld);
 
@@ -165,7 +166,7 @@ static int dir_lookup(struct fs_node *node, const char *name, uint32_t namelen, 
 	struct ramfs_node *tmp;
 	LIST_FOREACH(tmp, &dir->childs, chain)
 	{
-		if (strncmp(name, tmp->name, namelen))
+		if (strlen(tmp->name) != namelen || strncmp(name, tmp->name, namelen))
 			continue;
 		*child = &tmp->node;
 		return 0;
@@ -266,6 +267,9 @@ struct fs_sb *ramfs_init(void)
 	struct ramfs_reg *init = mkreg(bin, "init");
 	init->data = &BIN_SYMBOL(init, start);
 	init->size = &BIN_SYMBOL(init, end) - init->data;
+	struct ramfs_reg *ls = mkreg(bin, "ls");
+	ls->data = &BIN_SYMBOL(ls, start);
+	ls->size = &BIN_SYMBOL(ls, end) - ls->data;
 	struct ramfs_reg *libc = mkreg(lib, "libc.so");
 	libc->data = &LIB_SYMBOL(libc, start);
 	libc->size = &LIB_SYMBOL(libc, end) - libc->data;

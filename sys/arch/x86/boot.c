@@ -465,15 +465,15 @@ void kernel_main(struct multiboot_info *mb_info)
 	{
 		struct file *file;
 		struct fs_node *elf;
-		assert(!vfs_getnode(NULL, "/bin/sh", &elf), "can't open /bin/sh");
+		assert(!vfs_getnode(NULL, "/bin/init", &elf), "can't open /bin/init");
 		file = malloc(sizeof(*file), 0);
 		file->op = elf->fop;
 		file->node = elf;
 		file->off = 0;
 		file->refcount = 1;
-		const char *argv[] = {"/bin/sh", NULL};
+		const char *argv[] = {"/bin/init", NULL};
 		const char *envp[] = {NULL};
-		thread = uproc_create_elf("sh", file, argv, envp);
+		thread = uproc_create_elf("init", file, argv, envp);
 		sched_add(thread);
 		file_decref(file);
 	}

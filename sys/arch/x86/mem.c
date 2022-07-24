@@ -163,7 +163,15 @@ void paging_alloc(uint32_t addr)
 	uint32_t f = TBL_FLAG_RW | TBL_FLAG_P;
 	if (*tbl & TBL_FLAG_US)
 		f |= TBL_FLAG_US;
-	*tbl = mkentry(pmm_alloc_page(), f);
+	uint32_t paddr = pmm_alloc_page();
+	*tbl = mkentry(paddr, f);
+	/*if (f & TBL_FLAG_US)
+	{
+		void *dst = vmap(paddr, PAGE_SIZE);
+		assert(dst, "can't map created page\n");
+		memset(dst, 0, PAGE_SIZE);
+		vunmap(dst, PAGE_SIZE);
+	}*/
 	vunmap(tbl_ptr, PAGE_SIZE);
 }
 

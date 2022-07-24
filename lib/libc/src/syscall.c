@@ -73,6 +73,11 @@ int stat(const char *pathname, struct stat *statbuf)
 	return basic_syscall(SYS_STAT, (intptr_t)pathname, (intptr_t)statbuf, 0, 0, 0, 0);
 }
 
+int lstat(const char *pathname, struct stat *statbuf)
+{
+	return basic_syscall(SYS_LSTAT, (intptr_t)pathname, (intptr_t)statbuf, 0, 0, 0, 0);
+}
+
 int getdents(int fd, struct sys_dirent *dirp, unsigned count)
 {
 	return basic_syscall(SYS_GETDENTS, fd, (intptr_t)dirp, count, 0, 0, 0);
@@ -91,4 +96,26 @@ pid_t getppid(void)
 int execve(const char *pathname, char *const argv[], char *const envp[])
 {
 	return basic_syscall(SYS_EXECVE, (uint32_t)pathname, (uint32_t)argv, (uint32_t)envp, 0, 0, 0);
+}
+
+ssize_t readlink(const char *pathname, char *buf, size_t bufsiz)
+{
+	return basic_syscall(SYS_READLINK, (uint32_t)pathname, (uint32_t)buf, (uint32_t)bufsiz, 0, 0, 0);
+}
+
+void *mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off)
+{
+	void *ret = (void*)syscall(SYS_MMAP, (uint32_t)addr, len, prot, flags, fd, off);
+	int32_t r = (int32_t)ret;
+	if (r < 0 && r >= -1000) /* hack, consider maximum errno to be 1000 */
+	{
+		errno = -r;
+		return (void*)-1;
+	}
+	return ret;
+}
+
+int munmap(void *addr, size_t len)
+{
+	return basic_syscall(SYS_MUNMAP, (uint32_t)addr, len, 0, 0, 0, 0);
 }
